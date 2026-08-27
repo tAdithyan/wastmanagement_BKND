@@ -22,7 +22,7 @@ const startServer = async () => {
     await startRecurringPickupScheduler();
     await startMonthlyInvoiceScheduler();
 
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT,"0.0.0.0", () => {
       console.log(`=================================`);
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📖 Swagger Docs: http://localhost:${PORT}/api-docs`);
