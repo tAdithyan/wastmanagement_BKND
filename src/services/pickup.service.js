@@ -3,6 +3,8 @@ import User from "../models/user.model.js";
 import WastePrice from "../models/wastePrice.model.js";
 import ApiError from "../utils/apiError.js";
 import { notifyPickupEvent } from "./notification.service.js";
+import MonthlyInvoice from "../models/monthlyInvoice.model.js";
+import { currentBillingMonth, generateMonthlyInvoices } from "./monthlyInvoice.service.js";
 
 
 
@@ -41,7 +43,9 @@ export const getPickupById = async (id) => {
 
 export const getPickupByCustomerId = async (id) => {
     try {
-        const pickup = await Pickup.find({ customerId: id }).populate("customerId operatorId");
+        const pickup = await Pickup.find({ customerId: id })
+            .populate("customerId operatorId")
+            .populate("recurringContractId", "name collectionDays preferredTime ratePerKg address");
         return pickup;
     } catch (error) {
         throw error;
@@ -51,7 +55,9 @@ export const getPickupByCustomerId = async (id) => {
 
 export const getPickupForAgents = async (id) => {
     try {
-        const pickup = await Pickup.find({ operatorId: id }).populate("customerId operatorId");
+        const pickup = await Pickup.find({ operatorId: id })
+            .populate("customerId operatorId")
+            .populate("recurringContractId", "name collectionDays preferredTime ratePerKg address");
         return pickup;
     } catch (error) {
         throw error;
@@ -174,19 +180,26 @@ export const completePickup = async (id, data) => {
             pickup.status = "completed";
             pickup.paymentStatus = "accrued";
             await pickup.save();
+            const billingMonth = currentBillingMonth(pickup.preferredDate || new Date());
+            await generateMonthlyInvoices(billingMonth);
+            const invoice = await MonthlyInvoice.findOne({
+                recurringContractId: pickup.recurringContractId,
+                billingMonth,
+            });
             await Promise.all([
                 notifyPickupEvent({ recipientId: user._id, pickupId: pickup._id, event: "pickup_completed", title: "Pickup completed", message: `${pickup.pickupId} was completed successfully.` }),
-                notifyPickupEvent({ recipientId: user._id, pickupId: pickup._id, event: "monthly_charge_accrued", title: "Added to monthly bill", message: `₹${amount.toFixed(2)} was added to your recurring collection bill.` }),
+                notifyPickupEvent({ recipientId: user._id, pickupId: pickup._id, event: "bill_generated", title: "Invoice updated", message: `₹${amount.toFixed(2)} was added to your ${billingMonth} recurring pickup invoice.` }),
             ]);
             return {
                 status: 200,
                 data: {
-                    message: "Recurring pickup completed and added to monthly billing",
+                    message: "Recurring pickup completed and invoice generated",
                     pickup,
                     user,
                     pricePerKg,
-                    chargedAmount: amount,
-                    walletBalance: user.wallet,
+                    invoiceAmount: amount,
+                    invoice,
+                    billingMonth,
                     paymentDeferred: true,
                 }
             };

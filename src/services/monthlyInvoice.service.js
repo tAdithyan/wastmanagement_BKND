@@ -68,9 +68,13 @@ export const generateMonthlyInvoices = async (billingMonth = previousBillingMont
 
 let invoiceTimer;
 export const startMonthlyInvoiceScheduler = async () => {
-  await generateMonthlyInvoices().catch((error) => console.error("Monthly invoice generation failed:", error));
+  const generateDueInvoices = () => Promise.all([
+    generateMonthlyInvoices(previousBillingMonth()),
+    generateMonthlyInvoices(currentBillingMonth()),
+  ]);
+  await generateDueInvoices().catch((error) => console.error("Monthly invoice generation failed:", error));
   if (!invoiceTimer) invoiceTimer = setInterval(
-    () => generateMonthlyInvoices().catch((error) => console.error("Monthly invoice generation failed:", error)),
+    () => generateDueInvoices().catch((error) => console.error("Monthly invoice generation failed:", error)),
     6 * 60 * 60 * 1000
   );
 };
