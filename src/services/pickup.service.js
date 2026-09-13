@@ -93,8 +93,10 @@ export const createPickup = async (data) => {
 export const updatePickup = async (id, data) => {
     try {
         const updateData = { ...data };
+        delete updateData.completedAt;
         const existingPickup = await Pickup.findById(id);
         if (!existingPickup) throw new ApiError(404, "Pickup not found");
+        if (data.status === 'completed' && existingPickup.status !== 'completed') updateData.completedAt = new Date();
 
         if (data.weight !== undefined) {
             const weight = Number(data.weight);
@@ -178,6 +180,7 @@ export const completePickup = async (id, data) => {
         if (pickup.recurringContractId) {
             pickup.amount = amount;
             pickup.status = "completed";
+            pickup.completedAt = new Date();
             pickup.paymentStatus = "accrued";
             await pickup.save();
             const billingMonth = currentBillingMonth(pickup.preferredDate || new Date());
@@ -225,6 +228,7 @@ export const completePickup = async (id, data) => {
         }
         pickup.amount = amount;
         pickup.status = "completed";
+        pickup.completedAt = new Date();
         pickup.paymentStatus = "paid";
         await pickup.save();
         await Promise.all([
