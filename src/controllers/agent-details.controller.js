@@ -1,5 +1,6 @@
 import User from '../models/user.model.js';
 import Shift from '../models/shift.model.js';
+import Pickup from '../models/pickup.modal.js';
 import ApiError from '../utils/apiError.js';
 import ApiResponse from '../utils/apiResponse.js';
 
@@ -17,8 +18,19 @@ export async function listAgentDetails(req, res, next) {
     if (!['ROL_1', 'ROL_2', 'ROL_3'].includes(req.user.role)) throw new ApiError(403, 'Staff access required');
     const month = req.query.month || new Date(Date.now() + 330 * 60000).toISOString().slice(0, 7);
     const { start, end } = monthWindow(month);
-    const agents = await User.find({ role: 'ROL_4' }).select('name userId phonenumber email vehicleno is_active createdAt').sort({ name: 1 }).lean();
+    const users = await User.find({ role: { $in: ['ROL_3', 'ROL_4', 'Cordinator', 'CollectionAgent'] } }).select('name role userId phonenumber email vehicleno is_active createdAt').sort({ name: 1 }).lean();
+    const agents = users.map(user => ({ ...user, role: ({ Cordinator: 'ROL_3', CollectionAgent: 'ROL_4' })[user.role] || user.role }));
     const ids = agents.map(agent => agent._id);
+    const pickups = await Pickup.find({ operatorId: { $in: ids }, preferredDate: { $gte: start, $lt: end } })
+      .select('operatorId pickupId customerId wasteType preferredDate status weight amount paymentStatus')
+      .populate('customerId', 'name').sort({ preferredDate: -1 }).lean();
+    const pickupsByAgent = new Map();
+    for (const pickup of pickups) {
+      const id = String(pickup.operatorId);
+      const list = pickupsByAgent.get(id) || [];
+      list.push(pickup);
+      pickupsByAgent.set(id, list);
+    }
     // Include shifts crossing a month boundary and active shifts for current status.
     const shifts = await Shift.find({ agentId: { $in: ids }, $or: [
       { status: 'active' }, { startedAt: { $lt: end }, endedAt: { $gt: start } },
@@ -31,6 +43,6 @@ export async function listAgentDetails(req, res, next) {
       byAgent.set(id, list);
     }
     res.set('Cache-Control', 'no-store');
-    res.json(new ApiResponse(200, { month, timezone: 'Asia/Kolkata', agents: agents.map(agent => ({ ...agent, shifts: byAgent.get(String(agent._id)) || [] })) }, 'Agent details fetched'));
+    res.json(new ApiResponse(200, { month, timezone: 'Asia/Kolkata', agents: agents.map(agent => ({ ...agent, shifts: byAgent.get(String(agent._id)) || [], pickups: pickupsByAgent.get(String(agent._id)) || [] })) }, 'Agent details fetched'));
   } catch (error) { next(error); }
 }
