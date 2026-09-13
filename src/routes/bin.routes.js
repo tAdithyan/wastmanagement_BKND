@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { previewBinRoute } from '../controllers/bin-route.controller.js';
 import { assignBinAgentController, createBinController, getScannedBinController, listBinsController, listMyAssignedBinsController, updateBinController, updateScannedBinLocationController, updateScannedBinStatusController } from "../controllers/bin.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 import { authorize } from "../middlewares/role.middleware.js";
 
 const router = Router();
+router.post('/:id/route-preview', protect, authorize(['PERM_BIN_READ']), previewBinRoute);
 router.get("/assigned/me", protect, authorize(["PERM_BIN_READ"]), listMyAssignedBinsController);
 router.get("/scan/:token", protect, authorize(["PERM_BIN_READ"]), getScannedBinController);
 router.patch("/scan/:token/status", protect, authorize(["PERM_BIN_UPDATE"]), updateScannedBinStatusController);
