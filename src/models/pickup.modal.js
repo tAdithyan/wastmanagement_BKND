@@ -100,6 +100,7 @@ const pickupSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        completedAt: { type: Date, default: null, index: true },
         ratePerKg: { type: Number, default: null, min: 0 },
         recurringContractId: { type: mongoose.Schema.Types.ObjectId, ref: "RecurringPickup", default: null, index: true },
         recurringGenerationKey: { type: String, unique: true, sparse: true },
