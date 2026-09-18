@@ -6,6 +6,15 @@ const validPoint = (p) => p && typeof p.latitude === 'number' && typeof p.longit
   && Number.isFinite(p.latitude) && Number.isFinite(p.longitude)
   && Math.abs(p.latitude) <= 90 && Math.abs(p.longitude) <= 180;
 
+const safeDiagnostic = (value) => {
+  if (typeof value !== 'string') return undefined;
+  const key = process.env.GOOGLE_ROUTES_API_KEY?.trim();
+  return (key ? value.split(key).join('[REDACTED]') : value)
+    .replace(/AIza[\w-]+/g, '[REDACTED]')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+    .replace(/[\r\n]/g, ' ').slice(0, 1000);
+};
+
 function routeProviderError(httpStatus, payload) {
   const error = payload?.error;
   const reasons = Array.isArray(error?.details)
@@ -36,9 +45,15 @@ function routeProviderError(httpStatus, payload) {
     code = 'INVALID_REQUEST';
     explanation = 'Google rejected the route request format. Contact your administrator to check the route configuration.';
   }
-  // Log only our fixed diagnostic code and HTTP status, never the provider's
-  // raw message, which can contain keys, project identifiers, or coordinates.
-  console.warn('[route-preview] Google Routes request failed', { httpStatus, code });
+  console.warn('[route-preview] Google Routes response', JSON.stringify({
+    httpStatus,
+    code,
+    error: {
+      status: safeDiagnostic(error?.status),
+      message: safeDiagnostic(message),
+      reasons: reasons.map(safeDiagnostic),
+    },
+  }));
   return new ApiError(502, explanation);
 }
 
@@ -66,6 +81,15 @@ export async function previewBinRoute(req, res, next) {
       throw routeProviderError(response.status, failure);
     }
     const data = await response.json();
+    console.info('[route-preview] Google Routes response', JSON.stringify({
+      httpStatus: response.status,
+      routeCount: data.routes?.length || 0,
+      routes: data.routes?.map(route => ({
+        distanceMeters: route.distanceMeters,
+        duration: route.duration,
+        coordinateCount: route.polyline?.geoJsonLinestring?.coordinates?.length || 0,
+      })),
+    }));
     const route = data.routes?.[0];
     if (!route) throw new ApiError(404, 'No driving route was found to this bin.');
     const coordinates = route.polyline?.geoJsonLinestring?.coordinates?.map(([longitude, latitude]) => ({ latitude, longitude }));
