@@ -15,8 +15,11 @@ import monthlyInvoiceRoutes from "./monthlyInvoice.routes.js";
 import clientPortalRoutes from "./clientPortal.routes.js";
 import walletRoutes from "./wallet.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
+import { marketplace, marketplaceAdmin } from './marketplace.routes.js';
 
 const router = Router();
+router.use('/marketplace', marketplace);
+router.use('/admin/marketplace', marketplaceAdmin);
 
 router.use("/", healthRoutes);
 router.use("/", userRoutes);

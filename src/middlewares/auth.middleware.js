@@ -19,6 +19,7 @@ export const protect = async (req, res, next) => {
     }
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
+    if (!decoded.id || decoded.purpose) throw new ApiError(401, 'Complete registration before signing in');
     const user = await User.findById(decoded.id).select('-password');
     if (!user) throw new ApiError(401, 'User no longer exists');
     req.user = user;
@@ -36,6 +37,33 @@ export const protect = async (req, res, next) => {
  */
 export const signToken = (id) =>
   jwt.sign({ id }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+export const signRegistrationToken = (mobile) =>
+  jwt.sign({ mobile, purpose: 'registration' }, JWT_SECRET, { expiresIn: '30m' });
+
+export const requireRegistration = (req, res, next) => {
+  try {
+    const header = req.headers.authorization || '';
+    if (!header.startsWith('Bearer ')) throw new Error('Phone verification required');
+    const decoded = jwt.verify(header.slice(7), JWT_SECRET);
+    if (decoded.purpose !== 'registration' || typeof decoded.mobile !== 'string') {
+      throw new Error('Phone verification required');
+    }
+    req.registrationMobile = decoded.mobile;
+    next();
+  } catch {
+    next(new ApiError(401, 'Phone verification expired or invalid. Please verify your number again.'));
+  }
+};
+
+// Only read-only location lookups accept a pending registration credential.
+export const protectLocation = (req, res, next) => {
+  try {
+    const decoded = jwt.verify((req.headers.authorization || '').slice(7), JWT_SECRET);
+    if (decoded.purpose === 'registration') return requireRegistration(req, res, next);
+  } catch { /* Normal authentication reports the error. */ }
+  return protect(req, res, next);
+};
 
 
 

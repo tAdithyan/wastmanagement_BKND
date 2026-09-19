@@ -1,7 +1,8 @@
 // file: src/routes/auth.routes.js
 import { Router } from "express";
-import { sendOTP,verifyOTP } from "../controllers/auth.controller.js";
+import { sendOTP,verifyOTP,completeRegistration } from "../controllers/auth.controller.js";
 
+import { requireRegistration } from "../middlewares/auth.middleware.js";
 const router = Router();
 
 
@@ -163,7 +164,7 @@ router.post("/sendOTP", sendOTP);
  * /auth/VerifyOTP:
  *   post:
  *     summary: Verify OTP and login
- *     description: Validates the OTP for the given mobile number. On success, returns a JWT token and user details with permissions. Creates a new user if one does not already exist.
+ *     description: Validates the OTP for the given mobile number. On success, returns a JWT token and user details with permissions. New customers receive a temporary registration token; an account is created only after complete-registration.
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -231,4 +232,6 @@ router.post("/sendOTP", sendOTP);
 router.post("/VerifyOTP", verifyOTP);
 
 
+router.post("/complete-registration", requireRegistration, completeRegistration);
 export default router;
+

@@ -8,7 +8,7 @@ import {
   getURBs,
   getURBsByDistrict,
 } from "../controllers/location.controller.js";
-import { protect } from "../middlewares/auth.middleware.js";
+import { protectLocation } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
@@ -86,7 +86,7 @@ const router = Router();
  *       500:
  *         description: Internal server error
  */
-router.get("/districts", protect, getDistricts);
+router.get("/districts", protectLocation, getDistricts);
 
 /**
  * @swagger
@@ -118,7 +118,7 @@ router.get("/districts", protect, getDistricts);
  *       500:
  *         description: Internal server error
  */
-router.get("/districts/:code", protect, getDistrictByCode);
+router.get("/districts/:code", protectLocation, getDistrictByCode);
 
 /**
  * @swagger
@@ -158,7 +158,7 @@ router.get("/districts/:code", protect, getDistrictByCode);
  *       500:
  *         description: Internal server error
  */
-router.get("/pris", protect, getPRIs);
+router.get("/pris", protectLocation, getPRIs);
 
 /**
  * @swagger
@@ -198,7 +198,7 @@ router.get("/pris", protect, getPRIs);
  *       500:
  *         description: Internal server error
  */
-router.get("/pris/:code", protect, getPRIsByDistrict);
+router.get("/pris/:code", protectLocation, getPRIsByDistrict);
 
 /**
  * @swagger
@@ -238,7 +238,7 @@ router.get("/pris/:code", protect, getPRIsByDistrict);
  *       500:
  *         description: Internal server error
  */
-router.get("/urbans", protect, getURBs);
+router.get("/urbans", protectLocation, getURBs);
 
 /**
  * @swagger
@@ -278,6 +278,7 @@ router.get("/urbans", protect, getURBs);
  *       500:
  *         description: Internal server error
  */
-router.get("/urbans/:code", protect, getURBsByDistrict);
+router.get("/urbans/:code", protectLocation, getURBsByDistrict);
 
 export default router;
+
