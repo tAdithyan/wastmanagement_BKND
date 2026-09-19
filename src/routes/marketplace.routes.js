@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, raw } from 'express';
 import { protect } from '../middlewares/auth.middleware.js';
 import { requireMarketplaceAdmin } from '../middlewares/marketplace.middleware.js';
 import ApiError from '../utils/apiError.js';
@@ -8,6 +8,7 @@ import { listProducts, saveProduct, objectId, slugify, publicProduct } from '../
 import { priceLine } from '../services/marketplace-pricing.js';
 import { getCart, changeCart, checkoutQuote, placeOrder, listOrders, orderDetail, changeOrderStatus } from '../services/marketplace-order.service.js';
 import { inventory, adjustInventory, marketplaceDashboard } from '../services/marketplace-admin.service.js';
+import { MAX_PRODUCT_IMAGE_BYTES, uploadProductImage } from '../services/marketplace-image.service.js';
 
 export const marketplace = Router();
 export const marketplaceAdmin = Router();
@@ -36,6 +37,7 @@ marketplace.post('/quote', endpoint(async req => {
   return priceLine(product, objectId(req.body.variantId), req.body.purchaseMode, req.body.quantity);
 }));
 marketplaceAdmin.get('/products', endpoint(req => listProducts(req.query, true)));
+marketplaceAdmin.post('/images', raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: MAX_PRODUCT_IMAGE_BYTES }), endpoint(req => uploadProductImage(req.body)));
 marketplaceAdmin.post('/products', endpoint(req => saveProduct(req.body)));
 marketplaceAdmin.put('/products/:id', endpoint(req => saveProduct(req.body, req.params.id)));
 marketplaceAdmin.patch('/products/:id/status', endpoint(async req => {
