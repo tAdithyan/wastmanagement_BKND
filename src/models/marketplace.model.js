@@ -82,8 +82,8 @@ const orderSchema = new Schema({
   subtotal: money, discount: money, deliveryCharge: money, tax: money, totalAmount: money,
   shippingAddress: addressSchema,
   businessInfo: businessSchema,
-  paymentMethod: { type: String, enum: ['cod'], default: 'cod' },
-  paymentStatus: { type: String, enum: ['pending', 'paid', 'cancelled'], default: 'pending' },
+  paymentMethod: { type: String, enum: ['cod', 'wallet'], default: 'wallet' },
+  paymentStatus: { type: String, enum: ['pending', 'paid', 'cancelled', 'refunded'], default: 'pending' },
   orderStatus: { type: String, enum: ORDER_STATUSES, default: 'pending', index: true },
   statusHistory: [{ status: String, at: Date, actor: Schema.Types.ObjectId }],
 }, { timestamps: true, optimisticConcurrency: true });
