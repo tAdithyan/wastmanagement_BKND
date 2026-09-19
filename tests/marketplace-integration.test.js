@@ -1,3 +1,4 @@
+import User from '../src/models/user.model.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
@@ -20,8 +21,11 @@ test('real replica-set checkout: pricing, mixed stock, concurrency, idempotency,
       sizes: [{ size: 'M', sku: 'TEST-M', piecesPerPack: 40, packsPerCarton: 8, retailPrice: 499, retailSalePrice: 449, wholesaleCartonPrice: 3120, minimumWholesaleQuantity: 5, stockPacks: stock, retailStock: stock, wholesaleStock: 10, wholesalePricingTiers: [{ minQuantity: 5, maxQuantity: 9, pricePerCarton: 3120 }, { minQuantity: 10, maxQuantity: null, pricePerCarton: 3000 }] }],
     });
     const user = () => new mongoose.Types.ObjectId();
-    const body = { shippingAddress: { fullName: 'Test Customer', phone: '+919876543210', address: 'Test house', city: 'Kochi', district: 'Ernakulam', state: 'Kerala', pincode: '682001' }, paymentMethod: 'cod' };
-    const add = (u, p, quantity, purchaseMode = 'retail') => changeCart(u, { productId: String(p._id), variantId: String(p.sizes[0]._id), quantity, purchaseMode, unitPrice: 1 });
+    const body = { shippingAddress: { fullName: 'Test Customer', phone: '+919876543210', address: 'Test house', city: 'Kochi', district: 'Ernakulam', state: 'Kerala', pincode: '682001' }, paymentMethod: 'wallet' };
+    const add = async (u, p, quantity, purchaseMode = 'retail') => {
+      await User.updateOne({ _id: u }, { $setOnInsert: { name: 'Test Customer', phonenumber: String(u), wallet: 100000 } }, { upsert: true });
+      return changeCart(u, { productId: String(p._id), variantId: String(p.sizes[0]._id), quantity, purchaseMode, unitPrice: 1 });
+    };
     const p = await create(), u = user();
     await add(u, p, 2); await add(u, p, 5, 'wholesale');
     const quote = await checkoutQuote(u, body);
@@ -33,10 +37,32 @@ test('real replica-set checkout: pricing, mixed stock, concurrency, idempotency,
     assert.equal((await Product.findById(p._id)).sizes[0].stockPacks, 58);
     assert.equal((await getCart(u)).items.length, 0);
     assert.equal(orders[0].subtotal, 16498);
+    assert.equal(orders[0].paymentMethod, 'wallet');
+    assert.equal(orders[0].paymentStatus, 'paid');
+    assert.equal((await User.findById(u)).wallet, 100000 - 16498);
     await assert.rejects(orderDetail(String(orders[0]._id), user()), /not found/);
     await assert.rejects(changeOrderStatus(String(orders[0]._id), user(), 'cancelled'), /not found/);
     await Promise.all([changeOrderStatus(String(orders[0]._id), u, 'cancelled'), changeOrderStatus(String(orders[0]._id), u, 'cancelled')]);
     assert.equal((await Product.findById(p._id)).sizes[0].stockPacks, 100);
+    assert.equal((await User.findById(u)).wallet, 100000);
+    assert.equal((await Order.findById(orders[0]._id)).paymentStatus, 'refunded');
+    const poor = user(), unpaid = await create(5);
+    await add(poor, unpaid, 1);
+    await User.updateOne({ _id: poor }, { $set: { wallet: 100 } });
+    const poorQuote = await checkoutQuote(poor, body);
+    await Product.updateOne({ _id: unpaid._id }, { $set: { images: ['https://example.com/product.jpg'], 'sizes.0.stockPacks': 0 } });
+    const unavailable = await getCart(poor);
+    assert.equal(unavailable.items[0].image, 'https://example.com/product.jpg');
+    assert.equal(unavailable.items[0].productName, unpaid.name);
+    assert.ok(unavailable.items[0].error);
+    await Product.updateOne({ _id: unpaid._id }, { $set: { images: [], 'sizes.0.stockPacks': 5 } });
+    assert.equal(poorQuote.walletShortfall, 349);
+    await assert.rejects(placeOrder(poor, { ...body, quoteToken: poorQuote.quoteToken }, randomUUID()), /Insufficient wallet/);
+    assert.equal((await User.findById(poor)).wallet, 100);
+    assert.equal((await Product.findById(unpaid._id)).sizes[0].stockPacks, 5);
+    assert.equal(await Order.countDocuments({ userId: poor }), 0);
+    assert.equal((await getCart(poor)).items.length, 1);
+    await assert.rejects(checkoutQuote(poor, { ...body, paymentMethod: 'cod' }), /wallet/);
 
     const scarce = await create(1), a = user(), b = user();
     await add(a, scarce, 1); await add(b, scarce, 1);

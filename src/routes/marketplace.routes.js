@@ -73,6 +73,5 @@ marketplace.post('/orders/:id/cancel', endpoint(req => changeOrderStatus(req.par
 marketplaceAdmin.get('/orders', endpoint(req => listOrders(req.user._id, req.query, true)));
 marketplaceAdmin.get('/orders/:id', endpoint(req => orderDetail(req.params.id, req.user._id, true)));
 marketplaceAdmin.patch('/orders/:id/status', endpoint(req => {
-  if (req.body.status === 'delivered' && req.body.codCollected !== true) throw new ApiError(400, 'Confirm Cash on Delivery collection before marking delivered');
-  return changeOrderStatus(req.params.id, req.user._id, req.body.status, true);
+  return changeOrderStatus(req.params.id, req.user._id, req.body.status, true, req.body.codCollected === true);
 }));
