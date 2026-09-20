@@ -1,5 +1,13 @@
 import ApiResponse from "../utils/apiResponse.js";
 import ApiError from "../utils/apiError.js";
+import { requestPickupOtp } from '../services/pickupOtp.service.js';
+
+export const requestCompletionOtpController = async (req, res, next) => {
+    try {
+        const result = await requestPickupOtp(req.params.id, req.user);
+        res.json(new ApiResponse(200, result, 'OTP sent to the customer'));
+    } catch (error) { next(error); }
+};
 
 import {
     getAllPickups,
@@ -229,7 +237,7 @@ export const completePickupController = async (
     try {
         const { id } = req.params;
 
-        const result = await completePickup(id, req.body);
+        const result = await completePickup(id, req.body, req.user);
 
         return res
             .status(200)

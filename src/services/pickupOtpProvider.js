@@ -1,0 +1,67 @@
+import ApiError from '../utils/apiError.js';
+import { randomInt, randomUUID, createHash, timingSafeEqual } from 'node:crypto';
+
+const developmentCodes = new Map();
+function consoleOtpEnabled() {
+  if (process.env.PICKUP_OTP_MODE !== 'console') return false;
+  if (process.env.NODE_ENV !== 'development') throw new ApiError(503, 'Console pickup OTPs are only available in development.');
+  return true;
+}
+const codeHash = (sid, code) => createHash('sha256').update(`${sid}:${code}`).digest();
+
+export function normalizeOtpPhone(value) {
+  let phone = String(value || '').replace(/[\s()-]/g, '');
+  if (/^[6-9]\d{9}$/.test(phone)) phone = `+91${phone}`;
+  else if (/^91[6-9]\d{9}$/.test(phone)) phone = `+${phone}`;
+  if (!/^\+[1-9]\d{7,14}$/.test(phone)) throw new ApiError(400, 'The customer needs a valid phone number in their profile before an OTP can be sent.');
+  return phone;
+}
+export function requireOtpProvider() {
+  if (consoleOtpEnabled()) return {};
+  const { TWILIO_ACCOUNT_SID: account, TWILIO_AUTH_TOKEN: token, TWILIO_PICKUP_VERIFY_SERVICE_SID: service } = process.env;
+  if (!account || !token || !service) throw new ApiError(503, 'Pickup SMS verification is not configured. Please contact the administrator.');
+  return { account, token, service };
+}
+async function request(path, fields) {
+  const { account, token, service } = requireOtpProvider();
+  let response;
+  try {
+    response = await fetch(`https://verify.twilio.com/v2/Services/${encodeURIComponent(service)}/${path}`, {
+      method: 'POST', headers: { Authorization: `Basic ${Buffer.from(`${account}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields), signal: AbortSignal.timeout(15000),
+    });
+  } catch { throw new ApiError(503, 'The SMS verification service is unavailable. Please retry.'); }
+  if (!response.ok) {
+    if (response.status === 429) throw new ApiError(429, 'Too many OTP requests. Please wait before retrying.');
+    if (response.status === 404 && path === 'VerificationCheck') throw new ApiError(400, 'OTP expired or already used. Request another OTP.');
+    throw new ApiError(502, 'The SMS provider could not process this request. Please retry or contact the administrator.');
+  }
+  return response.json();
+}
+export async function sendPickupCode(phone) {
+  if (consoleOtpEnabled()) {
+    for (const [id, entry] of developmentCodes) if (entry.expiresAt <= Date.now()) developmentCodes.delete(id);
+    const sid = `dev:${randomUUID()}`;
+    const code = String(randomInt(100000, 1000000));
+    developmentCodes.set(sid, { hash: codeHash(sid, code), expiresAt: Date.now() + 300000 });
+    console.log(`[Pickup OTP · LOCAL DEVELOPMENT] Customer ending ${phone.slice(-4)}: ${code} (expires in 5 minutes; no SMS sent)`);
+    return sid;
+  }
+  const result = await request('Verifications', { To: phone, Channel: 'sms' });
+  if (result.status !== 'pending' || !result.sid) throw new ApiError(502, 'The SMS provider did not accept the OTP request.');
+  return result.sid;
+}
+export async function checkPickupCode(verificationSid, code) {
+  if (consoleOtpEnabled()) {
+    const entry = developmentCodes.get(verificationSid);
+    if (!entry || entry.expiresAt <= Date.now()) {
+      developmentCodes.delete(verificationSid);
+      throw new ApiError(400, 'OTP expired or the development server restarted. Request another OTP.');
+    }
+    const valid = timingSafeEqual(entry.hash, codeHash(verificationSid, code));
+    if (valid) developmentCodes.delete(verificationSid);
+    return valid;
+  }
+  const result = await request('VerificationCheck', { VerificationSid: verificationSid, Code: code });
+  return result.status === 'approved' && result.sid === verificationSid;
+}

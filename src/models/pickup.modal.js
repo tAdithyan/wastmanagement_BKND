@@ -37,6 +37,7 @@ const pickupSchema = new mongoose.Schema(
         },
 
         customerRequest: { type: Boolean, default: false },
+        completionLockId: { type: String, default: null, select: false },
         operatorId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
