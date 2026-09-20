@@ -27,6 +27,7 @@ const validate = (body) => {
 
 const normalizedPayload = (body) => ({
   ...body,
+  ...(body.operatorId !== undefined ? { operatorId: body.operatorId || null } : {}),
   assignedBin: body.assignedBin || null,
   pickupLocation: {
     type: "Point",
@@ -53,6 +54,13 @@ const validateClientCustomer = async (customerId) => {
   return customer;
 };
 
+const validateOperator = async (operatorId) => {
+  if (!operatorId) return;
+  if (!mongoose.Types.ObjectId.isValid(operatorId) || !await User.exists({ _id: operatorId, role: { $in: ["ROL_3", "ROL_4"] } })) {
+    throw new ApiError(400, "Select a valid collection agent or coordinator");
+  }
+};
+
 const validateClientOwnership = (user, customerId) => {
   if (isClientAdmin(user) && String(user._id) !== String(customerId)) {
     throw new ApiError(403, "Client Admin users can only manage their own recurring contract");
@@ -70,6 +78,7 @@ export const listRecurringPickups = async (_req, res, next) => { try {
     .populate("customerId", "name phonenumber address localbody wardNo houseNo pincode")
     .populate("assignedBin", "binId name location status qrToken")
     .populate("clientAdminId", "name phonenumber email userId")
+    .populate("operatorId", "name phonenumber role")
     .sort({ createdAt: -1 });
   res.json(new ApiResponse(200, contracts, "Recurring pickup contracts fetched"));
 } catch (error) { next(error); } };
@@ -80,11 +89,12 @@ export const createRecurringPickup = async (req, res, next) => { try {
   validateClientOwnership(req.user, req.body.customerId);
   await validateClientCustomer(req.body.customerId);
   await validateAssignedBin(req.body.assignedBin);
+  await validateOperator(req.body.operatorId);
   const payload = normalizedPayload(req.body);
   payload.clientAdminId = isClientAdmin(req.user) ? req.user._id : payload.customerId;
   const contract = await RecurringPickup.create(payload);
   await generateRecurringPickups();
-  await contract.populate("customerId assignedBin");
+  await contract.populate("customerId assignedBin operatorId");
   res.status(201).json(new ApiResponse(201, contract, "Recurring pickup contract created"));
 } catch (error) { next(error); } };
 
@@ -95,6 +105,9 @@ export const updateRecurringPickup = async (req, res, next) => { try {
   if (isClientAdmin(req.user)) {
     const existing = await RecurringPickup.findOne({ _id: req.params.id, ...clientContractFilter(req.user._id) });
     if (!existing) throw new ApiError(404, "Recurring pickup contract not found");
+    if (req.body.operatorId !== undefined && String(existing.operatorId || "") !== String(req.body.operatorId || "")) {
+      throw new ApiError(403, "Client Admin users cannot change the assigned agent");
+    }
     if (String(existing.customerId) !== String(req.body.customerId)) {
       throw new ApiError(403, "Client Admin users cannot change the contract customer");
     }
@@ -106,6 +119,7 @@ export const updateRecurringPickup = async (req, res, next) => { try {
     }
   }
   await validateAssignedBin(req.body.assignedBin, req.params.id);
+  if (!isClientAdmin(req.user)) await validateOperator(req.body.operatorId);
   const ownership = isClientAdmin(req.user) ? { _id: req.params.id, ...clientContractFilter(req.user._id) } : { _id: req.params.id };
   const payload = normalizedPayload(req.body);
   payload.clientAdminId = isClientAdmin(req.user) ? req.user._id : payload.customerId;

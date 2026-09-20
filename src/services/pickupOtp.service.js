@@ -25,7 +25,7 @@ export function assertOtpPickup(pickup, actor) {
   if (!(pickup.weight > 0))
     throw new ApiError(
       400,
-      "Save the collected weight before requesting an OTP.",
+      "Save the collected weight before completing this pickup.",
     );
 }
 export async function requestPickupOtp(id, actor) {

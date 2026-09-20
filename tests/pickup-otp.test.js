@@ -138,6 +138,22 @@ test('normal updates cannot bypass OTP by setting completed or using Mongo opera
   await assert.rejects(update('p1',{status:'completed'}),e=>e.statusCode===403);
   await assert.rejects(update('p1',{$set:{status:'completed'}}),e=>e.statusCode===400);
 });
+test('recurring completion skips OTP but enforces agent, status and weight; request data cannot bypass regular OTP', async()=>{
+  const body=pickupSource.slice(pickupSource.indexOf('export const completePickup ='),pickupSource.indexOf('const completeVerifiedPickup =')).replace('export const','const');
+  let checks=0, billed=0, released=0;
+  let row={...pickup,recurringContractId:'contract1'};
+  const model={findById:async()=>row,findOneAndUpdate:async()=>row,updateOne:async()=>{released++;}};
+  const complete=new Function('Pickup','assertOtpPickup','randomUUID','verifyPickupOtp','completeVerifiedPickup','ApiError',body+';return completePickup;')(model,harness().assertOtpPickup,()=> 'lock',async()=>{checks++;throw new ApiError(400,'OTP required');},async()=>{billed++;return 'done';},ApiError);
+  assert.equal(await complete('p1',{}, {_id:'a1'}),'done');
+  assert.equal(checks,0); assert.equal(billed,1); assert.equal(released,1);
+  await assert.rejects(complete('p1',{}, {_id:'other'}), e=>e.statusCode===403);
+  row={...row,weight:0}; await assert.rejects(complete('p1',{}, {_id:'a1'}));
+  row={...row,weight:12,status:'completed'}; await assert.rejects(complete('p1',{}, {_id:'a1'}));
+  row={...pickup};
+  await assert.rejects(complete('p1',{recurringContractId:'fake'}, {_id:'a1'}),/OTP required/);
+  assert.equal(checks,1); assert.equal(billed,1); assert.equal(released,2);
+});
+
 test('completion cannot call billing on failed verification and always releases its lock',async()=>{
   const body=pickupSource.slice(pickupSource.indexOf('export const completePickup ='),pickupSource.indexOf('const completeVerifiedPickup =')).replace('export const','const');
   let billed=0,released=0;
