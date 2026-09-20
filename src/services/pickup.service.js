@@ -83,7 +83,6 @@ export const getpickupsByStatus = async (status) => {
 
 export const createPickup = async (data) => {
     try {
-        await Pickup.init();
         const active = await Pickup.exists({ customerId: data.customerId, status: { $in: ACTIVE_PICKUP_STATUSES } });
         if (active) throw new ApiError(409, ACTIVE_PICKUP_MESSAGE);
         let pickup;

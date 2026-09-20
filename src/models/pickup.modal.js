@@ -106,7 +106,7 @@ const pickupSchema = new mongoose.Schema(
         completedAt: { type: Date, default: null, index: true },
         ratePerKg: { type: Number, default: null, min: 0 },
         recurringContractId: { type: mongoose.Schema.Types.ObjectId, ref: "RecurringPickup", default: null, index: true },
-        recurringGenerationKey: { type: String, unique: true, sparse: true },
+        recurringGenerationKey: { type: String, default: null, trim: true },
         paymentStatus: {
             type: String,
             enum: ["pending", "accrued", "invoiced", "paid", "overdue"],
@@ -211,6 +211,12 @@ pickupSchema.pre("save", async function () {
 pickupSchema.index({ customerId: 1 }, {
     name: 'one_active_customer_request', unique: true,
     partialFilterExpression: { customerRequest: true, status: { $in: ACTIVE_PICKUP_STATUSES } },
+});
+
+pickupSchema.index({ recurringGenerationKey: 1 }, {
+    name: 'recurringGenerationKey_1',
+    unique: true,
+    partialFilterExpression: { recurringGenerationKey: { $type: 'string' } },
 });
 
 const Pickup =
