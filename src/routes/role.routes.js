@@ -6,6 +6,7 @@ import {
 } from "../controllers/role.controller.js";
 import { protect } from '../middlewares/auth.middleware.js';
 import { authorize } from '../middlewares/role.middleware.js';
+import { superadminOnly } from '../controllers/sidebarAccess.controller.js';
 
 
 const router = Router();
@@ -150,6 +151,6 @@ router.get("/roles/:id", getRoleById);
  *             schema:
  *               $ref: '#/components/schemas/ApiError'
  */
-router.put("/roles/:id/permissions", updateRolePermissions);
+router.put("/roles/:id/permissions", protect, superadminOnly, updateRolePermissions);
 
 export default router;
