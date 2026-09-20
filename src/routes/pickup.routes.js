@@ -11,6 +11,7 @@ import {
     cancelPickupController,
     deletePickupController,
     completePickupController,
+    requestCompletionOtpController,
 } from "../controllers/pickups.controller.js";
 
 import { protect } from "../middlewares/auth.middleware.js";
@@ -321,6 +322,8 @@ router.put(
  *       403:
  *         description: Permission denied
  */
+router.post('/:id/completion-otp', protect, authorize(['PERM_PICKUP_COMPLETE', 'PERM_PICKUP_UPDATE']), requestCompletionOtpController);
+
 router.patch(
     "/:id/cancel",
     protect,
@@ -355,7 +358,7 @@ router.patch(
 router.patch(
     "/:id/complete",
     protect,
-    authorize(["PERM_PICKUP_COMPLETE"]),
+    authorize(["PERM_PICKUP_COMPLETE", "PERM_PICKUP_UPDATE"]),
     completePickupController
 );
 

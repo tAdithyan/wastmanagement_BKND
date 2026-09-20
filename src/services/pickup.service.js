@@ -1,5 +1,8 @@
 import Pickup from "../models/pickup.modal.js";
+import { randomUUID } from 'node:crypto';
+import { assertOtpPickup, verifyPickupOtp } from './pickupOtp.service.js';
 import User from "../models/user.model.js";
+import { ACTIVE_PICKUP_STATUSES, ACTIVE_PICKUP_MESSAGE } from '../constants/pickup-status.js';
 import WastePrice from "../models/wastePrice.model.js";
 import ApiError from "../utils/apiError.js";
 import { notifyPickupEvent } from "./notification.service.js";
@@ -80,7 +83,16 @@ export const getpickupsByStatus = async (status) => {
 
 export const createPickup = async (data) => {
     try {
-        const pickup = await Pickup.create(data);
+        await Pickup.init();
+        const active = await Pickup.exists({ customerId: data.customerId, status: { $in: ACTIVE_PICKUP_STATUSES } });
+        if (active) throw new ApiError(409, ACTIVE_PICKUP_MESSAGE);
+        let pickup;
+        try {
+            pickup = await Pickup.create({ ...data, customerRequest: true, status: 'scheduled', recurringContractId: null, completionLockId: null });
+        } catch (error) {
+            if (error.code === 11000 && (error.keyPattern?.customerId || error.message?.includes('one_active_customer_request'))) throw new ApiError(409, ACTIVE_PICKUP_MESSAGE);
+            throw error;
+        }
         await notifyPickupEvent({ recipientId: pickup.customerId, pickupId: pickup._id, event: "pickup_scheduled", title: "Pickup scheduled", message: `${pickup.pickupId} was scheduled successfully.` });
         return pickup;
     } catch (error) {
@@ -94,9 +106,13 @@ export const updatePickup = async (id, data) => {
     try {
         const updateData = { ...data };
         delete updateData.completedAt;
+        delete updateData.completionLockId;
+        if (Object.keys(data).some(key => key.startsWith('$') || key.includes('.'))) throw new ApiError(400, 'Invalid pickup update');
+        if (data.status === 'completed') throw new ApiError(403, 'Customer OTP verification is required. Use the complete pickup action.');
+        delete updateData.customerRequest;
+        delete updateData.customerId;
         const existingPickup = await Pickup.findById(id);
         if (!existingPickup) throw new ApiError(404, "Pickup not found");
-        if (data.status === 'completed' && existingPickup.status !== 'completed') updateData.completedAt = new Date();
 
         if (data.weight !== undefined) {
             const weight = Number(data.weight);
@@ -115,7 +131,8 @@ export const updatePickup = async (id, data) => {
             updateData.amount = Number((weight * pricePerKg).toFixed(2));
         }
 
-        const pickup = await Pickup.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+        const pickup = await Pickup.findOneAndUpdate({ _id: id, completionLockId: null }, updateData, { new: true, runValidators: true });
+        if (!pickup) throw new ApiError(409, 'Pickup completion is already being processed.');
         const customerId = existingPickup.customerId;
         if (!existingPickup.operatorId && pickup.operatorId) {
             await Promise.all([
@@ -137,7 +154,8 @@ export const updatePickup = async (id, data) => {
 
 export const cancelPickup = async (id, data) => {
     try {
-        const pickup = await Pickup.findByIdAndUpdate(id, { status: "cancelled", cancellationReason: data.cancellationReason }, { new: true });
+        const pickup = await Pickup.findOneAndUpdate({ _id: id, completionLockId: null }, { status: "cancelled", cancellationReason: data.cancellationReason }, { new: true });
+        if (!pickup) throw new ApiError(409, 'Pickup is unavailable or completion is being processed.');
         return pickup;
     } catch (error) {
         throw error;
@@ -149,7 +167,8 @@ export const cancelPickup = async (id, data) => {
 
 export const deletePickup = async (id) => {
     try {
-        const pickup = await Pickup.findByIdAndDelete(id);
+        const pickup = await Pickup.findOneAndDelete({ _id: id, completionLockId: null });
+        if (!pickup) throw new ApiError(409, 'Pickup is unavailable or completion is being processed.');
         return pickup;
     } catch (error) {
         throw error;
@@ -160,7 +179,21 @@ export const deletePickup = async (id) => {
 
 
 
-export const completePickup = async (id, data) => {
+export const completePickup = async (id, data, actor) => {
+    const candidate = await Pickup.findById(id);
+    assertOtpPickup(candidate, actor);
+    const lockId = randomUUID();
+    const locked = await Pickup.findOneAndUpdate({ _id: id, operatorId: actor._id, status: 'in_progress', completionLockId: null }, { $set: { completionLockId: lockId } }, { new: true });
+    if (!locked) throw new ApiError(409, 'Pickup changed or completion is already being processed. Refresh and retry.');
+    try {
+        await verifyPickupOtp(locked, actor, data?.otp);
+        return await completeVerifiedPickup(id);
+    } finally {
+        await Pickup.updateOne({ _id: id, completionLockId: lockId }, { $unset: { completionLockId: 1 } });
+    }
+};
+
+const completeVerifiedPickup = async (id) => {
     try {
         const pickup = await Pickup.findById(id);
         if (!pickup) throw new ApiError(404, "Pickup not found");
@@ -268,5 +301,6 @@ export const completePickup = async (id, data) => {
         
 //     }
 // } 
+
 
 

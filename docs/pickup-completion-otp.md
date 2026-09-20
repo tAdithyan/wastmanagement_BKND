@@ -1,0 +1,61 @@
+# Pickup completion OTP
+
+Pickup completion requires customer SMS verification. There is no development
+code in API responses and no fallback that completes without verification.
+
+## Local console testing
+
+Set `NODE_ENV=development` and `PICKUP_OTP_MODE=console` in the local backend
+`.env`, then restart the backend. Requesting a pickup OTP prints a six-digit
+code in the backend terminal, with the customer's last four phone digits.
+No SMS is sent in this mode. Enter that code in the agent modal. Codes expire
+after five minutes, are single-use, and are lost on server restart.
+Console mode is rejected outside development. Remove `PICKUP_OTP_MODE=console`
+to use Twilio SMS again. Never enable console mode on a shared hosted backend.
+
+## Server setup
+
+Create a Twilio account and a **dedicated Twilio Verify service for pickup
+completion**, configured for six-digit SMS codes. Add these server environment
+variables in the backend hosting settings, then restart/deploy the backend:
+
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_PICKUP_VERIFY_SERVICE_SID`
+
+Do not place credentials in Expo or web frontend settings or commit them.
+Configure the Verify service's permitted destination countries, spending limits,
+and provider requirements for sending to your customers. Trial accounts have
+destination restrictions. See https://www.twilio.com/docs/verify/api/verification.
+
+Until configured, sending an OTP returns 503 and pickup completion stays blocked.
+The existing login development-OTP endpoint is separate and is not used here.
+
+## Flow
+
+1. Assigned agent saves weight on an in-progress pickup and taps Complete pickup.
+2. `POST /api/v1/pickups/:id/completion-otp` sends to the customer's saved phone.
+   The response contains only a masked number, expiry and resend delay.
+3. Agent enters the customer's code in the mobile dialog.
+4. `PATCH /api/v1/pickups/:id/complete` with `{ "otp": "123456" }` verifies the
+   code before the existing completion/payment logic runs.
+
+The local challenge expires after five minutes, permits five checks, and limits
+sends to one per minute and five per hour per pickup. The provider can impose
+additional limits. Challenges are bound to the assigned agent, customer, phone,
+and saved weight. Changed details require a new request. A verified code is
+single-use; if a subsequent billing step fails, resolve that issue and resend.
+Update-status requests cannot set `completed`.
+
+Completion uses a persistent per-pickup lock to prevent concurrent completion,
+editing, cancellation or deletion while verification/payment is in progress.
+Locks are released on normal success and failure. After a server crash during
+completion, an administrator must inspect payment and pickup state before
+clearing a stranded `completionLockId`; do not automatically retry billing.
+An OTP challenge stranded in `sending` or `verifying` similarly requires
+inspection/reset after a crash. Do not expose these internal fields to clients.
+
+Deploy both the backend and mobile update together. Older clients without OTP
+submission cannot complete pickups after backend deployment. No live SMS was
+sent during implementation; verify delivery and the full completion/payment
+flow using a test pickup after configuring the provider.
