@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 
 const recurringPickupSchema = new mongoose.Schema({
   customerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+  operatorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   clientAdminId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
   qrToken: { type: String, unique: true, index: true, default: () => crypto.randomBytes(24).toString("hex") },
   assignedBin: { type: mongoose.Schema.Types.ObjectId, ref: "Bin", default: null, index: true },

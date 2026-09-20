@@ -1,6 +1,10 @@
 # Pickup completion OTP
 
-Pickup completion requires OTP verification. There is no development
+Regular pickup completion requires OTP verification. Recurring pickups complete
+without OTP, using their stored recurring contract link. Both flows require the
+assigned agent, an in-progress pickup, and saved weight. Recurring completion
+keeps the existing monthly invoice flow. Clients cannot change a pickup's recurring
+contract link through the regular update endpoint. There is no development
 code in API responses and no fallback that completes without verification.
 
 ## Local console testing

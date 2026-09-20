@@ -107,7 +107,9 @@ export const updatePickup = async (id, data) => {
         delete updateData.completedAt;
         delete updateData.completionLockId;
         if (Object.keys(data).some(key => key.startsWith('$') || key.includes('.'))) throw new ApiError(400, 'Invalid pickup update');
-        if (data.status === 'completed') throw new ApiError(403, 'Customer OTP verification is required. Use the complete pickup action.');
+        if (data.status === 'completed') throw new ApiError(403, 'Use the complete pickup action to complete this pickup.');
+        delete updateData.recurringContractId;
+        delete updateData.recurringGenerationKey;
         delete updateData.customerRequest;
         delete updateData.customerId;
         const existingPickup = await Pickup.findById(id);
@@ -185,7 +187,8 @@ export const completePickup = async (id, data, actor) => {
     const locked = await Pickup.findOneAndUpdate({ _id: id, operatorId: actor._id, status: 'in_progress', completionLockId: null }, { $set: { completionLockId: lockId } }, { new: true });
     if (!locked) throw new ApiError(409, 'Pickup changed or completion is already being processed. Refresh and retry.');
     try {
-        await verifyPickupOtp(locked, actor, data?.otp);
+        assertOtpPickup(locked, actor);
+        if (!locked.recurringContractId) await verifyPickupOtp(locked, actor, data?.otp);
         return await completeVerifiedPickup(id);
     } finally {
         await Pickup.updateOne({ _id: id, completionLockId: lockId }, { $unset: { completionLockId: 1 } });

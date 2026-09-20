@@ -37,6 +37,8 @@ const generateRecurringPickupsOnce = async (now) => {
       if (!contract.pickupLocation.type) contract.pickupLocation.type = "Point";
       await Pickup.create({
         customerId: contract.customerId,
+        operatorId: contract.operatorId || null,
+        status: contract.operatorId ? "assigned" : "scheduled",
         wasteType: contract.wasteType,
         preferredDate,
         pickupLocation: {
