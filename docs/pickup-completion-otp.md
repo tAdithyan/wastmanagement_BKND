@@ -1,17 +1,19 @@
 # Pickup completion OTP
 
-Pickup completion requires customer SMS verification. There is no development
+Pickup completion requires OTP verification. There is no development
 code in API responses and no fallback that completes without verification.
 
 ## Local console testing
 
-Set `NODE_ENV=development` and `PICKUP_OTP_MODE=console` in the local backend
+Pickup verification reuses the login OTP generator by default. Set `PICKUP_OTP_MODE=login` in the backend
 `.env`, then restart the backend. Requesting a pickup OTP prints a six-digit
 code in the backend terminal, with the customer's last four phone digits.
 No SMS is sent in this mode. Enter that code in the agent modal. Codes expire
 after five minutes, are single-use, and are lost on server restart.
-Console mode is rejected outside development. Remove `PICKUP_OTP_MODE=console`
-to use Twilio SMS again. Never enable console mode on a shared hosted backend.
+Login and pickup codes use separate namespaces, so one cannot authorize the other.
+This default has the same in-memory, single-process limitation as login: restart
+invalidates codes. Real customer SMS requires the optional provider below.
+The legacy `console` mode is an alias limited to development.
 
 ## Server setup
 
@@ -22,20 +24,21 @@ variables in the backend hosting settings, then restart/deploy the backend:
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_PICKUP_VERIFY_SERVICE_SID`
+- `PICKUP_OTP_MODE=twilio`
 
 Do not place credentials in Expo or web frontend settings or commit them.
 Configure the Verify service's permitted destination countries, spending limits,
 and provider requirements for sending to your customers. Trial accounts have
 destination restrictions. See https://www.twilio.com/docs/verify/api/verification.
 
-Until configured, sending an OTP returns 503 and pickup completion stays blocked.
-The existing login development-OTP endpoint is separate and is not used here.
+Twilio mode returns 503 if its credentials are missing. Default login mode needs
+no SMS credentials and prints the working code in the backend console.
 
 ## Flow
 
 1. Assigned agent saves weight on an in-progress pickup and taps Complete pickup.
-2. `POST /api/v1/pickups/:id/completion-otp` sends to the customer's saved phone.
-   The response contains only a masked number, expiry and resend delay.
+2. `POST /api/v1/pickups/:id/completion-otp` generates a code for the customer's saved phone.
+   The response contains only a masked number, expiry, resend delay and delivery mode.
 3. Agent enters the customer's code in the mobile dialog.
 4. `PATCH /api/v1/pickups/:id/complete` with `{ "otp": "123456" }` verifies the
    code before the existing completion/payment logic runs.

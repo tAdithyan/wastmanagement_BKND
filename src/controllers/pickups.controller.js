@@ -5,7 +5,7 @@ import { requestPickupOtp } from '../services/pickupOtp.service.js';
 export const requestCompletionOtpController = async (req, res, next) => {
     try {
         const result = await requestPickupOtp(req.params.id, req.user);
-        res.json(new ApiResponse(200, result, 'OTP sent to the customer'));
+        res.json(new ApiResponse(200, result, result.deliveryMode === 'console' ? 'Pickup OTP generated; check the backend console' : 'OTP sent to the customer'));
     } catch (error) { next(error); }
 };
 
