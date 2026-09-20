@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ApiError from '../src/utils/apiError.js';
+import { generateOTPService, verifyOTPService } from '../src/services/auth.service.js';
 import { normalizeOtpPhone, sendPickupCode, checkPickupCode } from '../src/services/pickupOtpProvider.js';
 
-const source = (await readFile(new URL('../src/services/pickupOtp.service.js', import.meta.url),'utf8')).replace(/^import .*;$/gm,'').replace(/export /g,'');
+const source = (await readFile(new URL('../src/services/pickupOtp.service.js', import.meta.url),'utf8')).replace(/^import[\s\S]*?;\r?$/gm,'').replace(/export /g,'');
 const pickup = { _id:'p1', operatorId:'a1', customerId:'u1', status:'in_progress', weight:12 };
 function harness(overrides={}) {
   const state = { _id:'p1',operatorId:'a1',customerId:'u1',phone:'+919876543210',weight:12,state:'pending',attempts:0,expiresAt:new Date(Date.now()+300000),verificationSid:'VEtest',...overrides };
@@ -59,7 +60,8 @@ test('concurrent verification attempts cannot both consume a challenge',async()=
 test('provider uses verification SID and does not expose OTPs in send responses',async t=>{
   const previous = {...process.env};
   const oldFetch=globalThis.fetch;
-  t.after(()=>{globalThis.fetch=oldFetch;for(const key of ['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_PICKUP_VERIFY_SERVICE_SID']){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];}});
+  t.after(()=>{globalThis.fetch=oldFetch;for(const key of ['PICKUP_OTP_MODE','TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_PICKUP_VERIFY_SERVICE_SID']){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key];}});
+  process.env.PICKUP_OTP_MODE='twilio';
   delete process.env.TWILIO_PICKUP_VERIFY_SERVICE_SID;
   await assert.rejects(sendPickupCode('+919876543210'),e=>e.statusCode===503);
   process.env.TWILIO_ACCOUNT_SID='test';process.env.TWILIO_AUTH_TOKEN='test';process.env.TWILIO_PICKUP_VERIFY_SERVICE_SID='test';
@@ -72,6 +74,25 @@ test('provider uses verification SID and does not expose OTPs in send responses'
 });
 
 const pickupSource=await readFile(new URL('../src/services/pickup.service.js',import.meta.url),'utf8');
+
+test('default pickup provider reuses login generation with isolated, expiring single-use codes', async t => {
+  const oldMode=process.env.PICKUP_OTP_MODE, oldLog=console.log, oldNow=Date.now;
+  const messages=[];
+  t.after(()=>{console.log=oldLog;Date.now=oldNow;if(oldMode===undefined)delete process.env.PICKUP_OTP_MODE;else process.env.PICKUP_OTP_MODE=oldMode;});
+  delete process.env.PICKUP_OTP_MODE;
+  console.log=message=>messages.push(message);
+  const loginCode=await generateOTPService('9876543210');
+  const sid=await sendPickupCode('+919876543210');
+  const code=messages.at(-1).match(/: (\d{6}) /)[1];
+  await assert.rejects(verifyOTPService('9876543210',loginCode,{purpose:'pickup',reference:'9876543210'}));
+  assert.equal(await verifyOTPService('9876543210',String(loginCode)),true);
+  assert.equal(await checkPickupCode(sid,code),true);
+  await assert.rejects(checkPickupCode(sid,code));
+  const expiredSid=await sendPickupCode('+919876543210');
+  const expiredCode=messages.at(-1).match(/: (\d{6}) /)[1];
+  Date.now=()=>oldNow()+300001;
+  await assert.rejects(checkPickupCode(expiredSid,expiredCode),/expired/);
+});
 test('console mode logs a working single-use code only in development',async t=>{
   const oldMode=process.env.PICKUP_OTP_MODE, oldEnvironment=process.env.NODE_ENV;
   const originalLog=console.log;
@@ -104,7 +125,7 @@ test('sending only returns masked metadata and applies server resend limits',asy
     {findById:()=>({select:async()=>pickup})}, {findById:async()=>({phonenumber:'9876543210'})}, model,ApiError,normalizeOtpPhone,()=>{},async()=>{sent++;return 'VEtest';},()=>{}
   );
   const response=await send('p1',{_id:'a1'});
-  assert.deepEqual(response,{maskedPhone:'••••••3210',expiresInSeconds:300,resendAfterSeconds:60});
+  assert.deepEqual(response,{maskedPhone:'••••••3210',expiresInSeconds:300,resendAfterSeconds:60,deliveryMode:'console'});
   assert.equal(updates[0].$set.state,'pending');
   assert.equal(filter.$and[1].$or[0].sends.$lt,5);
   blocked=true;

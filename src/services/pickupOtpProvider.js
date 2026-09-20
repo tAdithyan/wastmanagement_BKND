@@ -1,13 +1,13 @@
 import ApiError from '../utils/apiError.js';
-import { randomInt, randomUUID, createHash, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { generateOTPService, verifyOTPService } from './auth.service.js';
 
-const developmentCodes = new Map();
-function consoleOtpEnabled() {
-  if (process.env.PICKUP_OTP_MODE !== 'console') return false;
-  if (process.env.NODE_ENV !== 'development') throw new ApiError(503, 'Console pickup OTPs are only available in development.');
-  return true;
+function loginOtpEnabled() {
+  const mode = process.env.PICKUP_OTP_MODE || 'login';
+  if (mode === 'console' && process.env.NODE_ENV !== 'development') throw new ApiError(503, 'Console pickup OTPs are only available in development.');
+  if (!['login', 'console', 'twilio'].includes(mode)) throw new ApiError(503, 'Invalid pickup OTP mode.');
+  return mode !== 'twilio';
 }
-const codeHash = (sid, code) => createHash('sha256').update(`${sid}:${code}`).digest();
 
 export function normalizeOtpPhone(value) {
   let phone = String(value || '').replace(/[\s()-]/g, '');
@@ -17,7 +17,7 @@ export function normalizeOtpPhone(value) {
   return phone;
 }
 export function requireOtpProvider() {
-  if (consoleOtpEnabled()) return {};
+  if (loginOtpEnabled()) return {};
   const { TWILIO_ACCOUNT_SID: account, TWILIO_AUTH_TOKEN: token, TWILIO_PICKUP_VERIFY_SERVICE_SID: service } = process.env;
   if (!account || !token || !service) throw new ApiError(503, 'Pickup SMS verification is not configured. Please contact the administrator.');
   return { account, token, service };
@@ -39,12 +39,9 @@ async function request(path, fields) {
   return response.json();
 }
 export async function sendPickupCode(phone) {
-  if (consoleOtpEnabled()) {
-    for (const [id, entry] of developmentCodes) if (entry.expiresAt <= Date.now()) developmentCodes.delete(id);
-    const sid = `dev:${randomUUID()}`;
-    const code = String(randomInt(100000, 1000000));
-    developmentCodes.set(sid, { hash: codeHash(sid, code), expiresAt: Date.now() + 300000 });
-    console.log(`[Pickup OTP · LOCAL DEVELOPMENT] Customer ending ${phone.slice(-4)}: ${code} (expires in 5 minutes; no SMS sent)`);
+  if (loginOtpEnabled()) {
+    const sid = `pickup:${randomUUID()}`;
+    await generateOTPService(phone, { purpose: 'pickup', reference: sid });
     return sid;
   }
   const result = await request('Verifications', { To: phone, Channel: 'sms' });
@@ -52,15 +49,12 @@ export async function sendPickupCode(phone) {
   return result.sid;
 }
 export async function checkPickupCode(verificationSid, code) {
-  if (consoleOtpEnabled()) {
-    const entry = developmentCodes.get(verificationSid);
-    if (!entry || entry.expiresAt <= Date.now()) {
-      developmentCodes.delete(verificationSid);
-      throw new ApiError(400, 'OTP expired or the development server restarted. Request another OTP.');
+  if (loginOtpEnabled()) {
+    try { return await verifyOTPService(null, code, { purpose: 'pickup', reference: verificationSid }); }
+    catch (error) {
+      if (error.message === 'Invalid OTP') return false;
+      throw new ApiError(400, `${error.message}. Request another pickup OTP.`);
     }
-    const valid = timingSafeEqual(entry.hash, codeHash(verificationSid, code));
-    if (valid) developmentCodes.delete(verificationSid);
-    return valid;
   }
   const result = await request('VerificationCheck', { VerificationSid: verificationSid, Code: code });
   return result.status === 'approved' && result.sid === verificationSid;
