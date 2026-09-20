@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ACTIVE_PICKUP_STATUSES } from '../constants/pickup-status.js';
 
 /* =========================
    COUNTER SCHEMA
@@ -35,6 +36,7 @@ const pickupSchema = new mongoose.Schema(
             index: true,
         },
 
+        customerRequest: { type: Boolean, default: false },
         operatorId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
@@ -204,6 +206,11 @@ pickupSchema.pre("save", async function () {
 /* =========================
    MODEL
 ========================= */
+
+pickupSchema.index({ customerId: 1 }, {
+    name: 'one_active_customer_request', unique: true,
+    partialFilterExpression: { customerRequest: true, status: { $in: ACTIVE_PICKUP_STATUSES } },
+});
 
 const Pickup =
     mongoose.models.Pickup ||

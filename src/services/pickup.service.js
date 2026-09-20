@@ -1,5 +1,6 @@
 import Pickup from "../models/pickup.modal.js";
 import User from "../models/user.model.js";
+import { ACTIVE_PICKUP_STATUSES, ACTIVE_PICKUP_MESSAGE } from '../constants/pickup-status.js';
 import WastePrice from "../models/wastePrice.model.js";
 import ApiError from "../utils/apiError.js";
 import { notifyPickupEvent } from "./notification.service.js";
@@ -80,7 +81,16 @@ export const getpickupsByStatus = async (status) => {
 
 export const createPickup = async (data) => {
     try {
-        const pickup = await Pickup.create(data);
+        await Pickup.init();
+        const active = await Pickup.exists({ customerId: data.customerId, status: { $in: ACTIVE_PICKUP_STATUSES } });
+        if (active) throw new ApiError(409, ACTIVE_PICKUP_MESSAGE);
+        let pickup;
+        try {
+            pickup = await Pickup.create({ ...data, customerRequest: true, status: 'scheduled', recurringContractId: null });
+        } catch (error) {
+            if (error.code === 11000 && (error.keyPattern?.customerId || error.message?.includes('one_active_customer_request'))) throw new ApiError(409, ACTIVE_PICKUP_MESSAGE);
+            throw error;
+        }
         await notifyPickupEvent({ recipientId: pickup.customerId, pickupId: pickup._id, event: "pickup_scheduled", title: "Pickup scheduled", message: `${pickup.pickupId} was scheduled successfully.` });
         return pickup;
     } catch (error) {
@@ -94,6 +104,8 @@ export const updatePickup = async (id, data) => {
     try {
         const updateData = { ...data };
         delete updateData.completedAt;
+        delete updateData.customerRequest;
+        delete updateData.customerId;
         const existingPickup = await Pickup.findById(id);
         if (!existingPickup) throw new ApiError(404, "Pickup not found");
         if (data.status === 'completed' && existingPickup.status !== 'completed') updateData.completedAt = new Date();
@@ -268,5 +280,6 @@ export const completePickup = async (id, data) => {
         
 //     }
 // } 
+
 
 
