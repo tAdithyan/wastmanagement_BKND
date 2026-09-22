@@ -3,7 +3,7 @@ import ApiError from "../utils/apiError.js";
 import ApiResponse from "../utils/apiResponse.js";
 
 const assertAgent = (user) => {
-  if (user.role !== "ROL_4") throw new ApiError(403, "Only collection agents can manage shifts");
+  if (!["ROL_3", "ROL_4"].includes(user.role)) throw new ApiError(403, "Only coordinators and collection agents can manage shifts");
 };
 
 export const getActiveShift = async (req, res, next) => {
