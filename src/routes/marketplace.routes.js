@@ -73,7 +73,7 @@ marketplace.get('/orders', endpoint(req => listOrders(req.user._id, req.query)))
 marketplace.get('/orders/scan/:token', orderScannerAccess, endpoint(req => orderByQrToken(req.params.token)));
 marketplace.patch('/orders/scan/:token/status', orderScannerAccess, endpoint(async req => {
   const order = await orderByQrToken(req.params.token);
-  return changeOrderStatus(order._id, req.user._id, req.body.status, true, req.body.codCollected === true);
+  return changeOrderStatus(String(order._id), req.user._id, req.body.status, true, req.body.codCollected === true);
 }));
 marketplace.get('/orders/:id', endpoint(req => orderDetail(req.params.id, req.user._id)));
 marketplace.post('/orders/:id/cancel', endpoint(req => changeOrderStatus(req.params.id, req.user._id, 'cancelled')));
