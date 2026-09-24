@@ -6,7 +6,9 @@ export const createPickupReceiptPdf = (pickup) => {
   const completedAt = pickup.updatedAt ? new Date(pickup.updatedAt).toLocaleString("en-IN") : "Not available";
   const weight = Number(pickup.weight || 0);
   const amount = Number(pickup.amount || 0);
-  const pricePerKg = weight > 0 ? amount / weight : 0;
+  const taxableAmount = Number(pickup.taxableAmount || amount / 1.18 || 0);
+  const gstAmount = Number(pickup.gstAmount || Number((taxableAmount * 0.18).toFixed(2)));
+  const pricePerKg = Number(pickup.ratePerKg || (weight > 0 ? taxableAmount / weight : 0));
   const lines = [
     ["CLEANLOOP", 20, true],
     ["Waste Collection Receipt", 16, true],
@@ -20,8 +22,10 @@ export const createPickupReceiptPdf = (pickup) => {
     ["", 10],
     [`Waste category: ${pickup.wasteType}`, 11],
     [`Collected weight: ${weight.toFixed(2)} kg`, 11],
-    [`Price per kg: INR ${pricePerKg.toFixed(2)}`, 11],
-    [`Total charged: INR ${amount.toFixed(2)}`, 14, true],
+    [`Price per kg: INR ${pricePerKg.toFixed(2)} (before GST)`, 11],
+    [`Subtotal: INR ${taxableAmount.toFixed(2)}`, 11],
+    [`GST (18%): INR ${gstAmount.toFixed(2)}`, 11],
+    [`Total charged (incl. GST): INR ${amount.toFixed(2)}`, 14, true],
     ["", 10],
     ["Payment method: Customer wallet", 11],
     ["Status: PAID / COLLECTION COMPLETED", 11, true],

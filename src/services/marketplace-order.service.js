@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import User from '../models/user.model.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import ApiError from '../utils/apiError.js';
 import { Cart, Product, Category, Order, Counter } from '../models/marketplace.model.js';
 import { objectId, pageOptions } from './marketplace-catalog.service.js';
@@ -173,5 +173,16 @@ export async function listOrders(userId, query, admin = false) {
 export async function orderDetail(id, userId, admin = false) {
   const order = await Order.findOne({ _id: objectId(id), ...(admin ? {} : { userId }) });
   if (!order) throw new ApiError(404, 'Order not found');
+  if (!order.qrToken) {
+    order.qrToken = randomBytes(24).toString('hex');
+    await order.save();
+  }
+  return order;
+}
+
+export async function orderByQrToken(token) {
+  if (!/^[a-f0-9]{48}$/i.test(String(token || ''))) throw new ApiError(400, 'Invalid order QR code');
+  const order = await Order.findOne({ qrToken: token });
+  if (!order) throw new ApiError(404, 'Order QR code is invalid');
   return order;
 }
