@@ -6,13 +6,15 @@ import ApiResponse from '../utils/apiResponse.js';
 import { Product, Category } from '../models/marketplace.model.js';
 import { listProducts, saveProduct, objectId, slugify, publicProduct } from '../services/marketplace-catalog.service.js';
 import { priceLine } from '../services/marketplace-pricing.js';
-import { getCart, changeCart, checkoutQuote, placeOrder, listOrders, orderDetail, changeOrderStatus } from '../services/marketplace-order.service.js';
+import { getCart, changeCart, checkoutQuote, placeOrder, listOrders, orderDetail, orderByQrToken, changeOrderStatus } from '../services/marketplace-order.service.js';
 import { inventory, adjustInventory, marketplaceDashboard } from '../services/marketplace-admin.service.js';
 import { MAX_PRODUCT_IMAGE_BYTES, uploadProductImage } from '../services/marketplace-image.service.js';
 
 export const marketplace = Router();
 export const marketplaceAdmin = Router();
 const activeUser = (req, res, next) => req.user.is_active === false ? next(new ApiError(403, 'Account is inactive')) : next();
+const orderScannerAccess = (req, res, next) => ['ROL_1', 'ROL_2', 'ROL_3', 'ROL_4', 'SuperAdmin', 'Admin'].includes(req.user?.role)
+  ? next() : next(new ApiError(403, 'Order scanner access is restricted to authorized staff'));
 marketplace.use(protect, activeUser);
 marketplaceAdmin.use(protect, activeUser, requireMarketplaceAdmin);
 export const endpoint = handler => async (req, res, next) => {
@@ -68,6 +70,11 @@ marketplace.delete('/cart/:itemId', endpoint(req => changeCart(req.user._id, {},
 marketplace.post('/checkout-quote', endpoint(req => checkoutQuote(req.user._id, req.body)));
 marketplace.post('/orders', endpoint(req => placeOrder(req.user._id, req.body, req.get('Idempotency-Key'))));
 marketplace.get('/orders', endpoint(req => listOrders(req.user._id, req.query)));
+marketplace.get('/orders/scan/:token', orderScannerAccess, endpoint(req => orderByQrToken(req.params.token)));
+marketplace.patch('/orders/scan/:token/status', orderScannerAccess, endpoint(async req => {
+  const order = await orderByQrToken(req.params.token);
+  return changeOrderStatus(order._id, req.user._id, req.body.status, true, req.body.codCollected === true);
+}));
 marketplace.get('/orders/:id', endpoint(req => orderDetail(req.params.id, req.user._id)));
 marketplace.post('/orders/:id/cancel', endpoint(req => changeOrderStatus(req.params.id, req.user._id, 'cancelled')));
 marketplaceAdmin.get('/orders', endpoint(req => listOrders(req.user._id, req.query, true)));

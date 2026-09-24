@@ -6,11 +6,13 @@ import { ACTIVE_PICKUP_STATUSES, ACTIVE_PICKUP_MESSAGE } from '../constants/pick
 import WastePrice from "../models/wastePrice.model.js";
 import ApiError from "../utils/apiError.js";
 import { notifyPickupEvent } from "./notification.service.js";
-import MonthlyInvoice from "../models/monthlyInvoice.model.js";
-import { currentBillingMonth, generateMonthlyInvoices } from "./monthlyInvoice.service.js";
 
-
-
+const GST_RATE = 18;
+const calculateCharge = (weight, ratePerKg) => {
+    const taxableAmount = Number((weight * ratePerKg).toFixed(2));
+    const gstAmount = Number((taxableAmount * GST_RATE / 100).toFixed(2));
+    return { taxableAmount, gstAmount, totalAmount: Number((taxableAmount + gstAmount).toFixed(2)) };
+};
 export const getAllPickups = async (user = null) => {
     try {
         const query = {};
@@ -129,7 +131,11 @@ export const updatePickup = async (id, data) => {
             }
 
             updateData.weight = weight;
-            updateData.amount = Number((weight * pricePerKg).toFixed(2));
+            const charge = calculateCharge(weight, pricePerKg);
+            updateData.amount = charge.totalAmount;
+            updateData.taxableAmount = charge.taxableAmount;
+            updateData.gstAmount = charge.gstAmount;
+            updateData.gstRate = GST_RATE;
         }
 
         const pickup = await Pickup.findOneAndUpdate({ _id: id, completionLockId: null }, updateData, { new: true, runValidators: true });
@@ -206,7 +212,8 @@ const completeVerifiedPickup = async (id) => {
         const pricePerKg = pickup.ratePerKg ?? categoryPrice?.pricePerKg;
         if (pricePerKg == null) throw new ApiError(400, `Price per kg is not configured for ${pickup.wasteType}`);
 
-        const amount = Number((pickup.weight * pricePerKg).toFixed(2));
+        const charge = calculateCharge(pickup.weight, pricePerKg);
+        const amount = charge.totalAmount;
         if (!Number.isFinite(amount) || amount <= 0) {
             throw new ApiError(400, "Calculated pickup amount must be greater than zero");
         }
@@ -214,30 +221,26 @@ const completeVerifiedPickup = async (id) => {
         if (!user) throw new ApiError(404, "Customer not found");
         if (pickup.recurringContractId) {
             pickup.amount = amount;
+            pickup.taxableAmount = charge.taxableAmount;
+            pickup.gstAmount = charge.gstAmount;
+            pickup.gstRate = GST_RATE;
             pickup.status = "completed";
             pickup.completedAt = new Date();
             pickup.paymentStatus = "accrued";
             await pickup.save();
-            const billingMonth = currentBillingMonth(pickup.preferredDate || new Date());
-            await generateMonthlyInvoices(billingMonth);
-            const invoice = await MonthlyInvoice.findOne({
-                recurringContractId: pickup.recurringContractId,
-                billingMonth,
-            });
             await Promise.all([
                 notifyPickupEvent({ recipientId: user._id, pickupId: pickup._id, event: "pickup_completed", title: "Pickup completed", message: `${pickup.pickupId} was completed successfully.` }),
-                notifyPickupEvent({ recipientId: user._id, pickupId: pickup._id, event: "bill_generated", title: "Invoice updated", message: `₹${amount.toFixed(2)} was added to your ${billingMonth} recurring pickup invoice.` }),
             ]);
             return {
                 status: 200,
                 data: {
-                    message: "Recurring pickup completed and invoice generated",
+                    message: "Recurring pickup completed. It will be included in the month-end invoice, including 18% GST.",
                     pickup,
                     user,
                     pricePerKg,
                     invoiceAmount: amount,
-                    invoice,
-                    billingMonth,
+                    taxableAmount: charge.taxableAmount,
+                    gstAmount: charge.gstAmount,
                     paymentDeferred: true,
                 }
             };
@@ -262,13 +265,16 @@ const completeVerifiedPickup = async (id) => {
             throw new ApiError(500, "Customer wallet debit could not be verified");
         }
         pickup.amount = amount;
+        pickup.taxableAmount = charge.taxableAmount;
+        pickup.gstAmount = charge.gstAmount;
+        pickup.gstRate = GST_RATE;
         pickup.status = "completed";
         pickup.completedAt = new Date();
         pickup.paymentStatus = "paid";
         await pickup.save();
         await Promise.all([
             notifyPickupEvent({ recipientId: user._id, pickupId: pickup._id, event: "pickup_completed", title: "Pickup completed", message: `${pickup.pickupId} was completed successfully.` }),
-            notifyPickupEvent({ recipientId: user._id, pickupId: pickup._id, event: "bill_generated", title: "Bill generated", message: `A bill of ₹${amount.toFixed(2)} was generated for ${pickup.pickupId}.` }),
+            notifyPickupEvent({ recipientId: user._id, pickupId: pickup._id, event: "bill_generated", title: "Bill generated", message: `A bill of ₹${amount.toFixed(2)} (including 18% GST) was generated for ${pickup.pickupId}.` }),
             notifyPickupEvent({ recipientId: user._id, pickupId: pickup._id, event: "payment_successful", title: "Payment successful", message: `₹${amount.toFixed(2)} was paid from your wallet.` }),
         ]);
         return {
@@ -279,6 +285,8 @@ const completeVerifiedPickup = async (id) => {
                 user: updatedUser,
                 pricePerKg,
                 chargedAmount: amount,
+                taxableAmount: charge.taxableAmount,
+                gstAmount: charge.gstAmount,
                 walletBalance: updatedUser.wallet
             }
         }

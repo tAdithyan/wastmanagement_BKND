@@ -8,14 +8,16 @@ export const createMonthlyInvoicePdf = (invoice) => {
     [`Due date: ${new Date(invoice.dueDate).toLocaleDateString("en-IN")}`,10],["",7],
     [`Customer: ${customer.name || "Not available"}`,11,true],[`Phone: ${customer.phonenumber || "Not available"}`,10],
     [`Contract: ${contract.name || "Recurring collection"}`,10],
-    [`Rate: INR ${Number(contract.ratePerKg || 0).toFixed(2)} / kg`,10],["",7],["COLLECTION DETAILS",11,true],
+    [`Rate: INR ${Number(contract.ratePerKg || 0).toFixed(2)} / kg (before GST)`,10],[`GST: ${Number(invoice.gstRate || 18).toFixed(0)}%`,10],["",7],["COLLECTION DETAILS",11,true],
   ];
   (invoice.pickupIds || []).slice(0,22).forEach((pickup) => lines.push([
-    `${new Date(pickup.preferredDate).toLocaleDateString("en-IN")} | ${pickup.pickupId} | ${Number(pickup.weight||0).toFixed(2)} kg | INR ${Number(pickup.amount||0).toFixed(2)}`,9
+    `${new Date(pickup.preferredDate).toLocaleDateString("en-IN")} | ${pickup.pickupId} | ${Number(pickup.weight||0).toFixed(2)} kg | INR ${Number(pickup.amount||0).toFixed(2)} incl. GST`,9
   ]));
   lines.push(["",7],[`Total collections: ${invoice.pickupIds?.length||0}`,11],
     [`Total weight: ${Number(invoice.totalWeight||0).toFixed(2)} kg`,12,true],
-    [`TOTAL AMOUNT: INR ${Number(invoice.totalAmount||0).toFixed(2)}`,15,true],["",7],
+    [`Subtotal: INR ${Number(invoice.subtotal||0).toFixed(2)}`,11],
+    [`GST (${Number(invoice.gstRate || 18).toFixed(0)}%): INR ${Number(invoice.gstAmount||0).toFixed(2)}`,11],
+    [`TOTAL AMOUNT (INCL. GST): INR ${Number(invoice.totalAmount||0).toFixed(2)}`,15,true],["",7],
     [`Payment status: ${String(invoice.status).toUpperCase()}`,11,true],
     [`Payment method: ${invoice.paymentMethod||"Pending"}`,10],
     [invoice.paidAt?`Paid on: ${new Date(invoice.paidAt).toLocaleString("en-IN")}`:"Payment pending",10]);

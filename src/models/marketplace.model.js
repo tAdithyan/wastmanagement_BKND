@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'node:crypto';
 
 const { Schema } = mongoose;
 const integer = { type: Number, min: 0, default: 0, validate: Number.isSafeInteger };
@@ -75,6 +76,7 @@ const orderItemSchema = new Schema({
 export const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
 const orderSchema = new Schema({
   orderId: { type: String, required: true, unique: true },
+  qrToken: { type: String, unique: true, sparse: true, index: true, default: () => crypto.randomBytes(24).toString('hex') },
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   idempotencyKey: { type: String, required: true },
   items: [orderItemSchema],

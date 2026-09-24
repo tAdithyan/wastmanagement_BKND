@@ -38,7 +38,12 @@ export const generateMonthlyInvoices = async (billingMonth = previousBillingMont
       result.noEligiblePickups += 1;
       continue;
     }
-    const totalAmount = Number(pickups.reduce((sum, pickup) => sum + Number(pickup.amount || 0), 0).toFixed(2));
+    const subtotal = Number(pickups.reduce((sum, pickup) => sum + Number(pickup.taxableAmount > 0 ? pickup.taxableAmount : pickup.amount || 0), 0).toFixed(2));
+    const gstAmount = Number(pickups.reduce((sum, pickup) => {
+      const pickupSubtotal = Number(pickup.taxableAmount > 0 ? pickup.taxableAmount : pickup.amount || 0);
+      return sum + Number(pickup.gstAmount > 0 ? pickup.gstAmount : (pickupSubtotal * 0.18).toFixed(2));
+    }, 0).toFixed(2));
+    const totalAmount = Number((subtotal + gstAmount).toFixed(2));
     const totalWeight = Number(pickups.reduce((sum, pickup) => sum + Number(pickup.weight || 0), 0).toFixed(2));
     const dueDate = new Date(end); dueDate.setDate(10);
     const invoice = await MonthlyInvoice.findOneAndUpdate(
@@ -48,6 +53,9 @@ export const generateMonthlyInvoices = async (billingMonth = previousBillingMont
           customerId: contract.customerId,
           pickupIds: pickups.map((pickup) => pickup._id),
           totalAmount,
+          subtotal,
+          gstAmount,
+          gstRate: 18,
           totalWeight,
           dueDate,
           status: existingInvoice?.status || "issued",
@@ -67,14 +75,35 @@ export const generateMonthlyInvoices = async (billingMonth = previousBillingMont
 };
 
 let invoiceTimer;
+const MAX_TIMER_DELAY = 2_147_483_647;
+
+const millisecondsUntilNextMonth = () => {
+  const now = new Date();
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 5, 0, 0);
+  return nextMonth.getTime() - now.getTime();
+};
+
 export const startMonthlyInvoiceScheduler = async () => {
-  const generateDueInvoices = () => Promise.all([
-    generateMonthlyInvoices(previousBillingMonth()),
-    generateMonthlyInvoices(currentBillingMonth()),
-  ]);
-  await generateDueInvoices().catch((error) => console.error("Monthly invoice generation failed:", error));
-  if (!invoiceTimer) invoiceTimer = setInterval(
-    () => generateDueInvoices().catch((error) => console.error("Monthly invoice generation failed:", error)),
-    6 * 60 * 60 * 1000
-  );
+  const generatePreviousMonthInvoices = () =>
+    generateMonthlyInvoices(previousBillingMonth());
+
+  const scheduleNextMonthEndInvoices = () => {
+    const delay = millisecondsUntilNextMonth();
+    invoiceTimer = setTimeout(() => {
+      // Node.js timers cannot wait longer than MAX_TIMER_DELAY. Recalculate the
+      // remaining delay instead of accidentally generating an invoice early.
+      if (delay > MAX_TIMER_DELAY) {
+        scheduleNextMonthEndInvoices();
+        return;
+      }
+      generatePreviousMonthInvoices()
+        .catch((error) => console.error("Monthly invoice generation failed:", error))
+        .finally(scheduleNextMonthEndInvoices);
+    }, Math.min(delay, MAX_TIMER_DELAY));
+  };
+
+  // Catch up if the service starts after a month has ended, then run shortly
+  // after midnight on the first day of every following month.
+  await generatePreviousMonthInvoices().catch((error) => console.error("Monthly invoice generation failed:", error));
+  if (!invoiceTimer) scheduleNextMonthEndInvoices();
 };
