@@ -173,7 +173,9 @@ export async function listOrders(userId, query, admin = false) {
 export async function orderDetail(id, userId, admin = false) {
   const order = await Order.findOne({ _id: objectId(id), ...(admin ? {} : { userId }) });
   if (!order) throw new ApiError(404, 'Order not found');
-  if (!order.qrToken) {
+  // Mongoose provides defaults while reading legacy records; persist that token
+  // so the QR can be scanned later, not merely displayed once in the UI.
+  if (!order.qrToken || order.$isDefault?.('qrToken')) {
     order.qrToken = randomBytes(24).toString('hex');
     await order.save();
   }
