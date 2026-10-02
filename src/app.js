@@ -13,6 +13,9 @@ import { protect } from "./middlewares/auth.middleware.js";
 
 const app = express();
 
+// Honor the original HTTPS scheme behind the production reverse proxy.
+app.set("trust proxy", 1);
+
 // Security HTTP headers
 app.use(helmet());
 
