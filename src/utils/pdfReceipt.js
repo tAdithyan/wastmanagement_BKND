@@ -3,21 +3,33 @@ const escapePdf = (value) => String(value ?? "").replace(/([\\()])/g, "\\$1");
 export const createPickupReceiptPdf = (pickup) => {
   const customer = pickup.customerId || {};
   const operator = pickup.operatorId || {};
-  const completedAt = pickup.updatedAt ? new Date(pickup.updatedAt).toLocaleString("en-IN") : "Not available";
+  const completedAtValue = pickup.completedAt || pickup.updatedAt;
+  const completedAt = completedAtValue ? new Date(completedAtValue).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }) : "Not available";
   const weight = Number(pickup.weight || 0);
   const amount = Number(pickup.amount || 0);
   const taxableAmount = Number(pickup.taxableAmount || amount / 1.18 || 0);
   const gstAmount = Number(pickup.gstAmount || Number((taxableAmount * 0.18).toFixed(2)));
   const pricePerKg = Number(pickup.ratePerKg || (weight > 0 ? taxableAmount / weight : 0));
+  const coordinates = pickup.pickupLocation?.coordinates;
+  const gpsLocation = coordinates?.length === 2
+    ? `Latitude: ${coordinates[1]}, Longitude: ${coordinates[0]}`
+    : "GPS location: Not available";
+  const address = [customer.address, customer.localbody, customer.wardNo ? `Ward ${customer.wardNo}` : null, customer.pincode]
+    .filter(Boolean)
+    .join(", ");
   const lines = [
     ["CLEANLOOP", 20, true],
     ["Waste Collection Receipt", 16, true],
     ["", 10],
     [`Receipt / Pickup ID: ${pickup.pickupId || pickup._id}`, 11],
-    [`Completed: ${completedAt}`, 11],
+    [`Timestamp (IST): ${completedAt}`, 11],
+    [gpsLocation, 10],
     ["", 10],
     [`Customer: ${customer.name || "Not available"}`, 11],
     [`Customer phone: ${customer.phonenumber || "Not available"}`, 11],
+    [`WhatsApp: ${customer.whatsappnumber || "Not available"}`, 10],
+    [`Email: ${customer.email || "Not available"}`, 10],
+    [`Client address: ${address || "Not available"}`, 10],
     [`Collection agent: ${operator.name || "Not available"}`, 11],
     ["", 10],
     [`Waste category: ${pickup.wasteType}`, 11],
@@ -25,7 +37,7 @@ export const createPickupReceiptPdf = (pickup) => {
     [`Price per kg: INR ${pricePerKg.toFixed(2)} (before GST)`, 11],
     [`Subtotal: INR ${taxableAmount.toFixed(2)}`, 11],
     [`GST (18%): INR ${gstAmount.toFixed(2)}`, 11],
-    [`Total charged (incl. GST): INR ${amount.toFixed(2)}`, 14, true],
+    [`Billing amount (incl. GST): INR ${amount.toFixed(2)}`, 14, true],
     ["", 10],
     ["Payment method: Customer wallet", 11],
     ["Status: PAID / COLLECTION COMPLETED", 11, true],
@@ -35,7 +47,8 @@ export const createPickupReceiptPdf = (pickup) => {
 
   let y = 790;
   const content = lines.map(([line, size, bold]) => {
-    const command = `BT /${bold ? "F2" : "F1"} ${size} Tf 55 ${y} Td (${escapePdf(line)}) Tj ET`;
+    const safeLine = String(line).replace(/[^\x20-\x7E]/g, "?");
+    const command = `BT /${bold ? "F2" : "F1"} ${size} Tf 55 ${y} Td (${escapePdf(safeLine)}) Tj ET`;
     y -= Number(size) + 10;
     return command;
   }).join("\n");
