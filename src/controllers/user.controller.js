@@ -24,8 +24,8 @@ export const getUserByPhonenumber = async (req, res, next) => {
 
 export const getAllUsers = async (req, res, next) => {
   try {
-    const { search, role } = req.query;
-    const users = await getAllUsersService({ search, role });
+    const { search, role, page, limit } = req.query;
+    const users = await getAllUsersService({ search, role, page, limit });
     return res
       .status(200)
       .json(new ApiResponse(200, users, "Users fetched successfully"));

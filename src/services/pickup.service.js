@@ -13,17 +13,39 @@ const calculateCharge = (weight, ratePerKg) => {
     const gstAmount = Number((taxableAmount * GST_RATE / 100).toFixed(2));
     return { taxableAmount, gstAmount, totalAmount: Number((taxableAmount + gstAmount).toFixed(2)) };
 };
-export const getAllPickups = async (user = null) => {
+export const getAllPickups = async (user = null, filters = {}) => {
     try {
-        const query = {};
+        const scopeQuery = {};
         if (["ROL_6", "CLIENT_ADMIN"].includes(user?.role)) {
             const RecurringPickup = (await import("../models/recurringPickup.model.js")).default;
-            query.recurringContractId = { $in: await RecurringPickup.find({ $or: [{ clientAdminId: user._id }, { customerId: user._id }] }).distinct("_id") };
+            scopeQuery.recurringContractId = { $in: await RecurringPickup.find({ $or: [{ clientAdminId: user._id }, { customerId: user._id }] }).distinct("_id") };
         }
-        const pickups = await Pickup.find(query)
+        const query = { ...scopeQuery };
+        if (filters.status && filters.status !== 'all') query.status = filters.status;
+        if (filters.search?.trim()) {
+            const search = new RegExp(filters.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            const customerIds = await User.find({ $or: [{ name: search }, { phonenumber: search }] }).distinct('_id');
+            query.$or = [{ pickupId: search }, { wasteType: search }, { customerId: { $in: customerIds } }];
+        }
+
+        const paginated = filters.page !== undefined || filters.limit !== undefined;
+        const findPickups = () => Pickup.find(query)
             .populate("customerId operatorId")
             .populate("recurringContractId", "name collectionDays preferredTime ratePerKg address");
-        return pickups;
+        if (paginated) {
+            const page = Math.max(1, Number.parseInt(filters.page, 10) || 1);
+            const limit = Math.min(100, Math.max(1, Number.parseInt(filters.limit, 10) || 10));
+            const [items, total, allTotal, scheduled, assigned] = await Promise.all([
+                findPickups().sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit),
+                Pickup.countDocuments(query),
+                Pickup.countDocuments(scopeQuery),
+                Pickup.countDocuments({ ...scopeQuery, status: 'scheduled' }),
+                Pickup.countDocuments({ ...scopeQuery, status: 'assigned' }),
+            ]);
+            return { items, total, page, limit, totalPages: Math.ceil(total / limit), counts: { total: allTotal, scheduled, assigned } };
+        }
+
+        return findPickups().sort({ createdAt: -1, _id: -1 });
     } catch (error) {
         throw error;
 

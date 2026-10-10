@@ -2,16 +2,25 @@ import { randomUUID } from "node:crypto";
 import Pickup from "../models/pickup.modal.js";
 import ApiError from "../utils/apiError.js";
 import ApiResponse from "../utils/apiResponse.js";
-import { createPickupReceiptPdf } from "../utils/pdfReceipt.js";
+import { createPickupReceiptHtml } from "../utils/pickupReceiptHtml.js";
 
 const receiptTokens = new Map();
 const TOKEN_LIFETIME_MS = 2 * 60 * 1000;
 
-const loadCompletedPickup = async (id) => {
+export const loadCompletedPickup = async (id) => {
   const pickup = await Pickup.findById(id).populate("customerId operatorId");
   if (!pickup) throw new ApiError(404, "Pickup not found");
   if (pickup.status !== "completed") throw new ApiError(400, "Receipt is available only for completed pickups");
   return pickup;
+};
+
+export const consumeReceiptToken = async (id, token) => {
+  const record = receiptTokens.get(token);
+  receiptTokens.delete(token);
+  if (!record || record.pickupId !== id || record.expiresAt < Date.now()) {
+    throw new ApiError(401, "Receipt link is invalid or expired");
+  }
+  return loadCompletedPickup(id);
 };
 
 export const createReceiptLinkController = async (req, res, next) => {
@@ -31,18 +40,12 @@ export const createReceiptLinkController = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-export const downloadReceiptController = async (req, res, next) => {
+export const viewReceiptHtmlController = async (req, res, next) => {
   try {
-    const record = receiptTokens.get(req.query.token);
-    receiptTokens.delete(req.query.token);
-    if (!record || record.pickupId !== req.params.id || record.expiresAt < Date.now()) {
-      throw new ApiError(401, "Receipt link is invalid or expired");
-    }
-    const pickup = await loadCompletedPickup(req.params.id);
-    const pdf = createPickupReceiptPdf(pickup);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${pickup.pickupId || "pickup"}-receipt.pdf"`);
-    res.setHeader("Content-Length", pdf.length);
-    res.send(pdf);
+    const pickup = await consumeReceiptToken(req.params.id, req.query.token);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+    res.send(createPickupReceiptHtml(pickup));
   } catch (error) { next(error); }
 };

@@ -22,8 +22,18 @@ export const getAllUsersService = async (filters = {}) => {
     query.role = filters.role;
   }
 
-  const users = await User.find(query).sort({ createdAt: -1 });
-  return users;
+  const paginated = filters.page !== undefined || filters.limit !== undefined;
+  if (paginated) {
+    const page = Math.max(1, Number.parseInt(filters.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(filters.limit, 10) || 10));
+    const [items, total] = await Promise.all([
+      User.find(query).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit),
+      User.countDocuments(query),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  return User.find(query).sort({ createdAt: -1, _id: -1 });
 };
 
 export const getUserByIdService = async (id) => {

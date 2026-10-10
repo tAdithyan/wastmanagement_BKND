@@ -28,7 +28,12 @@ import {
 // ----------------------------------------
 export const getAllPickupsController = async (req, res, next) => {
     try {
-        const pickups = await getAllPickups(req.user);
+        const pickups = await getAllPickups(req.user, {
+            page: req.query.page,
+            limit: req.query.limit,
+            status: req.query.status,
+            search: req.query.search,
+        });
 
         return res
             .status(200)

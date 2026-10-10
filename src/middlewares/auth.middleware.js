@@ -5,7 +5,6 @@ import User from '../models/user.model.js';
 import { admin } from "../config/firebaseAdmin.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
 
 /**
  * Verify JWT token sent in Authorization header.
@@ -36,7 +35,7 @@ export const protect = async (req, res, next) => {
  * Helper to issue a JWT for a given user id.
  */
 export const signToken = (id) =>
-  jwt.sign({ id }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  jwt.sign({ id }, JWT_SECRET);
 
 export const signRegistrationToken = (mobile) =>
   jwt.sign({ mobile, purpose: 'registration' }, JWT_SECRET, { expiresIn: '30m' });
