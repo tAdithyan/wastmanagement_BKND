@@ -1,11 +1,14 @@
 import { Router } from "express";
-import { createRazorpayOrder, downloadMonthlyInvoice, generateInvoices, listMonthlyInvoices, payMonthlyInvoice, verifyRazorpayPayment } from "../controllers/monthlyInvoice.controller.js";
+import { createRazorpayOrder, generateInvoices, listMonthlyInvoices, payMonthlyInvoice, verifyRazorpayPayment } from "../controllers/monthlyInvoice.controller.js";
+import { createMonthlyInvoicePdfLinkController, downloadPdfController, setPdfDocumentType } from "../controllers/commonPdf.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 import { authorize } from "../middlewares/role.middleware.js";
 const router = Router();
 router.get("/", protect, authorize(["PERM_PICKUP_READ"]), listMonthlyInvoices);
 router.post("/generate", protect, authorize(["PERM_PICKUP_CREATE"]), generateInvoices);
-router.get("/:id/pdf", protect, authorize(["PERM_REPORTS_EXPORT", "PERM_PICKUP_READ"]), downloadMonthlyInvoice);
+router.get("/:id/pdf", protect, authorize(["PERM_REPORTS_EXPORT", "PERM_PICKUP_READ"]), setPdfDocumentType("monthly-invoice"), downloadPdfController);
+router.post("/:id/pdf-link", protect, authorize(["PERM_REPORTS_EXPORT", "PERM_PICKUP_READ"]), createMonthlyInvoicePdfLinkController);
+router.get("/:id/pdf-download/:token", setPdfDocumentType("monthly-invoice-link"), downloadPdfController);
 router.post("/:id/razorpay-order", protect, createRazorpayOrder);
 router.post("/:id/razorpay-verify", protect, verifyRazorpayPayment);
 router.patch("/:id/pay", protect, authorize(["PERM_PICKUP_COMPLETE"]), payMonthlyInvoice);

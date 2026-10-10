@@ -4,20 +4,9 @@ import User from "../models/user.model.js";
 import ApiError from "../utils/apiError.js";
 import ApiResponse from "../utils/apiResponse.js";
 import { currentBillingMonth, generateMonthlyInvoices } from "../services/monthlyInvoice.service.js";
-import { createMonthlyInvoicePdf } from "../utils/pdfMonthlyInvoice.js";
 import RecurringPickup from "../models/recurringPickup.model.js";
 import crypto from "node:crypto";
-
-const assertInvoiceAccess = async (user, invoice) => {
-  if (user.role === "ROL_5") {
-    if (String(invoice.customerId?._id || invoice.customerId) !== String(user._id)) throw new ApiError(403, "This monthly invoice is not assigned to you");
-    return;
-  }
-  if (!["ROL_6", "CLIENT_ADMIN"].includes(user.role)) return;
-  const contractId = invoice.recurringContractId?._id || invoice.recurringContractId;
-  const allowed = await RecurringPickup.exists({ _id: contractId, $or: [{ clientAdminId: user._id }, { customerId: user._id }] });
-  if (!allowed) throw new ApiError(403, "This monthly invoice is not assigned to you");
-};
+import { assertInvoiceAccess } from "../utils/monthlyInvoiceAccess.js";
 
 export const listMonthlyInvoices = async (req, res, next) => { try {
   const filter = {};
@@ -64,20 +53,6 @@ export const payMonthlyInvoice = async (req, res, next) => { try {
   await invoice.save();
   await Pickup.updateMany({ _id: { $in: invoice.pickupIds } }, { paymentStatus: "paid" });
   res.json(new ApiResponse(200, invoice, "Monthly invoice paid successfully"));
-} catch (error) { next(error); } };
-
-export const downloadMonthlyInvoice = async (req, res, next) => { try {
-  const invoice = await MonthlyInvoice.findById(req.params.id)
-    .populate("customerId", "name phonenumber address")
-    .populate("recurringContractId", "name ratePerKg address")
-    .populate("pickupIds", "pickupId preferredDate wasteType weight ratePerKg amount status");
-  if (!invoice) throw new ApiError(404, "Monthly invoice not found");
-  await assertInvoiceAccess(req.user, invoice);
-  const pdf = createMonthlyInvoicePdf(invoice);
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="CleanLoop-${invoice.billingMonth}-invoice.pdf"`);
-  res.setHeader("Content-Length", pdf.length);
-  res.send(pdf);
 } catch (error) { next(error); } };
 
 export const createRazorpayOrder = async (req, res, next) => { try {

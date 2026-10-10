@@ -16,11 +16,13 @@ import {
 
 import { protect } from "../middlewares/auth.middleware.js";
 import { authorize } from "../middlewares/role.middleware.js";
-import { createReceiptLinkController, downloadReceiptController } from "../controllers/receipt.controller.js";
+import { createReceiptLinkController, viewReceiptHtmlController } from "../controllers/receipt.controller.js";
+import { downloadPdfController, setPdfDocumentType } from "../controllers/commonPdf.controller.js";
 
 const router = Router();
 
-router.get("/:id/receipt.pdf", downloadReceiptController);
+router.get("/:id/receipt.pdf", setPdfDocumentType("pickup-receipt"), downloadPdfController);
+router.get("/:id/receipt.html", viewReceiptHtmlController);
 router.post("/:id/receipt-link", protect, createReceiptLinkController);
 
 /**
