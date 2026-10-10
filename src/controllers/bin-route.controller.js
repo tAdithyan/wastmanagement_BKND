@@ -1,4 +1,5 @@
 import Bin from '../models/bin.model.js';
+import Pickup from '../models/pickup.modal.js';
 import ApiError from '../utils/apiError.js';
 import ApiResponse from '../utils/apiResponse.js';
 
@@ -92,6 +93,42 @@ export async function previewBinRoute(req, res, next) {
     }));
     const route = data.routes?.[0];
     if (!route) throw new ApiError(404, 'No driving route was found to this bin.');
+    const coordinates = route.polyline?.geoJsonLinestring?.coordinates?.map(([longitude, latitude]) => ({ latitude, longitude }));
+    const durationSeconds = Number(route.duration?.replace(/s$/, ''));
+    if (!coordinates || coordinates.length < 2 || !coordinates.every(validPoint)
+      || !Number.isFinite(durationSeconds) || !Number.isFinite(route.distanceMeters)) {
+      throw new ApiError(502, 'The route service returned an invalid route. Please try again.');
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json(new ApiResponse(200, { coordinates, distanceMeters: route.distanceMeters, durationSeconds }, 'Route preview ready'));
+  } catch (error) {
+    next(error.name === 'TimeoutError' ? new ApiError(504, 'Route request timed out. Please try again.') : error);
+  }
+}
+
+export async function previewPickupRoute(req, res, next) {
+  try {
+    if (req.user.role !== 'ROL_4') throw new ApiError(403, 'Collection Agent access required');
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new ApiError(400, 'Invalid pickup ID');
+    if (!validPoint(req.body.origin)) throw new ApiError(400, 'Valid starting coordinates are required');
+    const pickup = await Pickup.findOne({ _id: req.params.id, operatorId: req.user._id });
+    if (!pickup) throw new ApiError(404, 'Assigned pickup not found');
+    const [longitude, latitude] = pickup.pickupLocation?.coordinates || [];
+    const destination = { latitude: Number(latitude), longitude: Number(longitude) };
+    if (!validPoint(destination)) throw new ApiError(400, 'This pickup has no valid GPS location');
+    const key = process.env.GOOGLE_ROUTES_API_KEY?.trim();
+    if (!key) throw new ApiError(503, 'Route previews are not configured yet. Contact your administrator.');
+    const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'POST', signal: AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.geoJsonLinestring' },
+      body: JSON.stringify({ origin: { location: { latLng: req.body.origin } },
+        destination: { location: { latLng: destination } }, travelMode: 'DRIVE',
+        routingPreference: 'TRAFFIC_UNAWARE', polylineEncoding: 'GEO_JSON_LINESTRING', units: 'METRIC' }),
+    });
+    if (!response.ok) throw routeProviderError(response.status, await response.json().catch(() => null));
+    const route = (await response.json()).routes?.[0];
+    if (!route) throw new ApiError(404, 'No driving route was found to this pickup.');
     const coordinates = route.polyline?.geoJsonLinestring?.coordinates?.map(([longitude, latitude]) => ({ latitude, longitude }));
     const durationSeconds = Number(route.duration?.replace(/s$/, ''));
     if (!coordinates || coordinates.length < 2 || !coordinates.every(validPoint)

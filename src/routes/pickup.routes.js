@@ -18,8 +18,10 @@ import { protect } from "../middlewares/auth.middleware.js";
 import { authorize } from "../middlewares/role.middleware.js";
 import { createReceiptLinkController, viewReceiptHtmlController } from "../controllers/receipt.controller.js";
 import { downloadPdfController, setPdfDocumentType } from "../controllers/commonPdf.controller.js";
+import { previewPickupRoute } from "../controllers/bin-route.controller.js";
 
 const router = Router();
+router.post("/:id/route-preview", protect, authorize(["PERM_PICKUP_READ"]), previewPickupRoute);
 
 router.get("/:id/receipt.pdf", setPdfDocumentType("pickup-receipt"), downloadPdfController);
 router.get("/:id/receipt.html", viewReceiptHtmlController);
