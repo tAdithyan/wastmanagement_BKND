@@ -1,6 +1,7 @@
 import Shift from "../models/shift.model.js";
 import ApiError from "../utils/apiError.js";
 import ApiResponse from "../utils/apiResponse.js";
+import { closeInactiveShifts } from "../services/shift.service.js";
 
 const assertAgent = (user) => {
   if (!["ROL_3", "ROL_4"].includes(user.role)) throw new ApiError(403, "Only coordinators and collection agents can manage shifts");
@@ -9,6 +10,7 @@ const assertAgent = (user) => {
 export const getActiveShift = async (req, res, next) => {
   try {
     assertAgent(req.user);
+    await closeInactiveShifts();
     const shift = await Shift.findOne({ agentId: req.user._id, status: "active" });
     res.json(new ApiResponse(200, shift, shift ? "Active shift fetched" : "No active shift"));
   } catch (error) { next(error); }
@@ -16,6 +18,7 @@ export const getActiveShift = async (req, res, next) => {
 
 export const listActiveAgentShifts = async (req, res, next) => {
   try {
+    await closeInactiveShifts();
     const shifts = await Shift.find({ status: "active" })
       .populate("agentId", "name phonenumber whatsappnumber userId role vehicleno")
       .populate("collectedBins", "binId name location coordinates collectedAt")
@@ -29,9 +32,11 @@ export const listActiveAgentShifts = async (req, res, next) => {
 export const startShift = async (req, res, next) => {
   try {
     assertAgent(req.user);
+    await closeInactiveShifts();
     const existing = await Shift.findOne({ agentId: req.user._id, status: "active" });
     if (existing) return res.json(new ApiResponse(200, existing, "Shift is already active"));
-    const shift = await Shift.create({ agentId: req.user._id, startedAt: new Date() });
+    const now = new Date();
+    const shift = await Shift.create({ agentId: req.user._id, startedAt: now, lastActivityAt: now });
     res.status(201).json(new ApiResponse(201, shift, "Shift started"));
   } catch (error) { next(error); }
 };
@@ -48,11 +53,24 @@ export const addShiftLocation = async (req, res, next) => {
     const point = { latitude: lat, longitude: lng, accuracy: Number.isFinite(Number(accuracy)) ? Number(accuracy) : null, recordedAt: recordedAt || new Date() };
     const shift = await Shift.findOneAndUpdate(
       { _id: req.params.id, agentId: req.user._id, status: "active" },
-      { $push: { route: point }, $set: { lastLocation: point } },
+      { $push: { route: point }, $set: { lastLocation: point, lastActivityAt: new Date() } },
       { new: true, runValidators: true }
     );
     if (!shift) throw new ApiError(404, "Active shift not found");
     res.json(new ApiResponse(200, shift.lastLocation, "Shift location recorded"));
+  } catch (error) { next(error); }
+};
+
+export const recordShiftActivity = async (req, res, next) => {
+  try {
+    assertAgent(req.user);
+    const shift = await Shift.findOneAndUpdate(
+      { _id: req.params.id, agentId: req.user._id, status: "active" },
+      { $set: { lastActivityAt: new Date() } },
+      { new: true }
+    );
+    if (!shift) throw new ApiError(404, "Active shift not found");
+    res.json(new ApiResponse(200, { lastActivityAt: shift.lastActivityAt }, "Shift activity recorded"));
   } catch (error) { next(error); }
 };
 

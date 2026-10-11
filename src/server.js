@@ -5,6 +5,7 @@ import { seedDefaultPermissions } from "./services/permission.service.js";
 import { seedDefaultRoles } from "./services/role.service.js";
 import { startRecurringPickupScheduler } from "./services/recurringPickup.service.js";
 import { startMonthlyInvoiceScheduler } from "./services/monthlyInvoice.service.js";
+import { startShiftCleanupScheduler } from "./services/shift.service.js";
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ const startServer = async () => {
     console.log("🌱 Default Roles & Permissions mapping seeded/verified (ROL_1 to ROL_6)");
     await startRecurringPickupScheduler();
     await startMonthlyInvoiceScheduler();
+    startShiftCleanupScheduler();
 
     const server = app.listen(PORT,"0.0.0.0", () => {
       console.log(`=================================`);

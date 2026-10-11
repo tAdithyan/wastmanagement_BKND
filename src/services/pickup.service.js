@@ -22,6 +22,22 @@ export const getAllPickups = async (user = null, filters = {}) => {
         }
         const query = { ...scopeQuery };
         if (filters.status && filters.status !== 'all') query.status = filters.status;
+        if (filters.preferredDate?.trim()) {
+            const preferredDate = filters.preferredDate.trim();
+            const dateParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(preferredDate);
+            if (!dateParts) throw new ApiError(400, 'Preferred date must use YYYY-MM-DD format.');
+            const [, yearText, monthText, dayText] = dateParts;
+            const year = Number(yearText);
+            const month = Number(monthText);
+            const day = Number(dayText);
+            const calendarDate = new Date(Date.UTC(year, month - 1, day));
+            if (calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 || calendarDate.getUTCDate() !== day) {
+                throw new ApiError(400, 'Preferred date must be a valid calendar date.');
+            }
+            // Preferred dates are calendar dates in the app's India timezone (UTC+05:30).
+            const start = new Date(Date.UTC(year, month - 1, day) - (5 * 60 + 30) * 60 * 1000);
+            query.preferredDate = { $gte: start, $lt: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+        }
         if (filters.search?.trim()) {
             const search = new RegExp(filters.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
             const customerIds = await User.find({ $or: [{ name: search }, { phonenumber: search }] }).distinct('_id');
