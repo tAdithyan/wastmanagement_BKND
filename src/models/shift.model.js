@@ -15,6 +15,7 @@ const shiftSchema = new mongoose.Schema(
     agentId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     status: { type: String, enum: ["active", "completed"], default: "active", index: true },
     startedAt: { type: Date, required: true, default: Date.now },
+    lastActivityAt: { type: Date, default: Date.now, index: true },
     endedAt: { type: Date, default: null },
     durationSeconds: { type: Number, default: 0 },
     route: { type: [pointSchema], default: [] },
@@ -25,4 +26,5 @@ const shiftSchema = new mongoose.Schema(
 );
 
 shiftSchema.index({ agentId: 1, status: 1 });
+shiftSchema.index({ status: 1, lastActivityAt: 1 });
 export default mongoose.model("Shift", shiftSchema);

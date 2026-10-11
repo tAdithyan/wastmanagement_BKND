@@ -33,6 +33,7 @@ export const getAllPickupsController = async (req, res, next) => {
             limit: req.query.limit,
             status: req.query.status,
             search: req.query.search,
+            preferredDate: req.query.preferredDate,
         });
 
         return res
