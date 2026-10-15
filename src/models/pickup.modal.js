@@ -171,6 +171,7 @@ const pickupSchema = new mongoose.Schema(
 pickupSchema.index({
     pickupLocation: "2dsphere",
 });
+pickupSchema.index({ createdAt: -1 }, { name: "pickup_recent_dashboard" });
 
 
 /* =========================

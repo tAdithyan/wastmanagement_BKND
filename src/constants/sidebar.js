@@ -1,6 +1,6 @@
 export const sidebarSections = [
   ['dashboard', 'Dashboard'], ['pickups', 'Pickups'], ['recurring-pickups', 'Recurring Pickups'],
-  ['waste-pricing', 'Waste Pricing'], ['bins', 'Bin Management'], ['active-agents', 'Live Agents'],
+  ['waste-pricing', 'Waste Pricing'], ['service-areas', 'Service Areas'], ['bins', 'Bin Management'], ['active-agents', 'Live Agents'],
   ['agents', 'Agent Details'], ['waste-analysis', 'Waste Analysis'], ['usermanagement', 'Users'],
   ['marketplace', 'Marketplace'], ['permissionManagement', 'Permissions'],
 ].map(([id, label]) => ({ id, label }));

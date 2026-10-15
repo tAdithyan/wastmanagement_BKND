@@ -1,5 +1,6 @@
 import Pickup from "../models/pickup.modal.js";
 import RecurringPickup from "../models/recurringPickup.model.js";
+import { assertPickupDistrictServiceable } from './serviceArea.service.js';
 
 const dateKey = (date) => [
   date.getFullYear(),
@@ -35,6 +36,7 @@ const generateRecurringPickupsOnce = async (now) => {
       if (alreadyGenerated) continue;
 
       if (!contract.pickupLocation.type) contract.pickupLocation.type = "Point";
+      await assertPickupDistrictServiceable(contract.pickupLocation.coordinates[0], contract.pickupLocation.coordinates[1]);
       await Pickup.create({
         customerId: contract.customerId,
         operatorId: contract.operatorId || null,
@@ -54,6 +56,10 @@ const generateRecurringPickupsOnce = async (now) => {
       await contract.save();
       generated += 1;
     } catch (error) {
+      if (error?.statusCode === 403) {
+        console.warn(`Skipped recurring pickup in a disabled or unsupported district for contract ${contract._id}.`);
+        continue;
+      }
       if (error?.code !== 11000) throw error;
     }
   }

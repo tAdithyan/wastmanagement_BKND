@@ -17,11 +17,13 @@ import walletRoutes from "./wallet.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
 import { marketplace, marketplaceAdmin } from './marketplace.routes.js';
 import sidebarAccessRoutes from './sidebarAccess.routes.js';
+import serviceAreaRoutes from './serviceArea.routes.js';
 
 const router = Router();
 router.use('/sidebar-access', sidebarAccessRoutes);
 router.use('/marketplace', marketplace);
 router.use('/admin/marketplace', marketplaceAdmin);
+router.use('/service-areas', serviceAreaRoutes);
 
 router.use("/", healthRoutes);
 router.use("/", userRoutes);
