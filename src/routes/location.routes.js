@@ -60,7 +60,7 @@ const router = Router();
  * /locations/districts:
  *   get:
  *     summary: List districts
- *     description: Returns all districts. Use q to perform a case-insensitive district-name search.
+ *     description: Returns districts. Use q to search by name or serviceableOnly=true to list only districts enabled by administrators.
  *     tags: [Locations]
  *     security:
  *       - bearerAuth: []
@@ -72,6 +72,12 @@ const router = Router();
  *           type: string
  *         description: District-name search text
  *         example: erna
+ *       - in: query
+ *         name: serviceableOnly
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *         description: Return only districts currently enabled for RePamp service
  *     responses:
  *       200:
  *         description: Districts fetched successfully
