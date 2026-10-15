@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { protect } from '../middlewares/auth.middleware.js';
-import { checkLocationServiceability, getDistrictServiceability, patchDistrictServiceability } from '../controllers/serviceArea.controller.js';
+import { checkLocationServiceability, getDistrictServiceability, patchDistrictServiceability, getRadiusServiceAreas, postRadiusServiceArea, patchRadiusServiceArea } from '../controllers/serviceArea.controller.js';
 
 const router = Router();
 const administratorOnly = (req, _res, next) => ['ROL_1', 'ROL_2', 'SuperAdmin', 'Admin'].includes(req.user?.role)
@@ -78,5 +78,66 @@ router.get('/districts', protect, administratorOnly, getDistrictServiceability);
  *       404: { description: Supported district not found }
  */
 router.patch('/districts/:id/status', protect, administratorOnly, patchDistrictServiceability);
+
+/**
+ * @swagger
+ * /service-areas/radii:
+ *   get:
+ *     summary: List point-radius service areas
+ *     tags: [Service Areas]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Radius service areas and active status }
+ *       403: { description: Administrator access required }
+ *   post:
+ *     summary: Add a service radius around a map point
+ *     tags: [Service Areas]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, latitude, longitude, radiusMeters]
+ *             properties:
+ *               name: { type: string, example: Kochi Depot }
+ *               latitude: { type: number, example: 9.9312 }
+ *               longitude: { type: number, example: 76.2673 }
+ *               radiusMeters: { type: number, minimum: 100, maximum: 100000, example: 5000 }
+ *     responses:
+ *       201: { description: Radius service area created }
+ *       400: { description: Invalid name, coordinates, or radius }
+ *       403: { description: Administrator access required }
+ */
+router.get('/radii', protect, administratorOnly, getRadiusServiceAreas);
+router.post('/radii', protect, administratorOnly, postRadiusServiceArea);
+/**
+ * @swagger
+ * /service-areas/radii/{id}/status:
+ *   patch:
+ *     summary: Activate or deactivate a radius service area
+ *     tags: [Service Areas]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [isActive]
+ *             properties:
+ *               isActive: { type: boolean }
+ *     responses:
+ *       200: { description: Radius service area updated }
+ *       403: { description: Administrator access required }
+ *       404: { description: Radius service area not found }
+ */
+router.patch('/radii/:id/status', protect, administratorOnly, patchRadiusServiceArea);
 
 export default router;
