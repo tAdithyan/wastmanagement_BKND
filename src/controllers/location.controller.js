@@ -70,7 +70,9 @@ export const getURBsByDistrict = async (req, res, next) => {
 export const getDistricts = async (req, res, next) => {
   try {
     const q = req.query.q;
-    const filter = q ? { districtName: { $regex: q, $options: "i" } } : {};
+    const filter = {};
+    if (q) filter.districtName = { $regex: q, $options: "i" };
+    if (req.query.serviceableOnly === 'true') filter.isServiceable = true;
     const districts = await District.find(filter, { districtCode: 1, districtName: 1 }).sort({ districtCode: 1 });
     res.json(districts);
   } catch (err) {
