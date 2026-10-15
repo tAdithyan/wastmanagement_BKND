@@ -13,10 +13,16 @@ function districtModel(matches = [], configured = 14) {
   };
   return { model, calls };
 }
+function radiusModel(matches = []) {
+  return {
+    countDocuments: async () => matches.length,
+    find: filter => ({ select() { this.filter = filter; return this; }, lean: async () => matches }),
+  };
+}
 
 test('valid GPS coordinates are sent to the Kerala 2dsphere district lookup', async () => {
   const { model, calls } = districtModel([{ districtName: 'Thrissur', stateName: 'Kerala', isServiceable: true }]);
-  const result = await checkDistrictServiceability(10.5276, 76.2144, model);
+  const result = await checkDistrictServiceability(10.5276, 76.2144, model, radiusModel());
   assert.equal(result.supported, true);
   assert.equal(result.serviceable, true);
   assert.equal(result.district, 'Thrissur');
@@ -26,7 +32,7 @@ test('valid GPS coordinates are sent to the Kerala 2dsphere district lookup', as
 
 test('a disabled district is identified and returned as restricted', async () => {
   const { model } = districtModel([{ districtName: 'Palakkad', stateName: 'Kerala', isServiceable: false }]);
-  const result = await checkDistrictServiceability(10.8, 76.6, model);
+  const result = await checkDistrictServiceability(10.8, 76.6, model, radiusModel());
   assert.equal(result.supported, true);
   assert.equal(result.serviceable, false);
   assert.equal(result.district, 'Palakkad');
@@ -34,7 +40,7 @@ test('a disabled district is identified and returned as restricted', async () =>
 
 test('coordinates outside Kerala boundaries are unsupported rather than classified as restricted', async () => {
   const { model } = districtModel([]);
-  const result = await checkDistrictServiceability(12, 80, model);
+  const result = await checkDistrictServiceability(12, 80, model, radiusModel());
   assert.deepEqual(result, { supported: false, serviceable: false, district: null, state: null, message: 'This location is outside the supported district dataset.' });
 });
 
@@ -43,7 +49,7 @@ test('a shared/overlapping boundary is allowed only when every matching district
     { districtName: 'Ernakulam', stateName: 'Kerala', isServiceable: true },
     { districtName: 'Thrissur', stateName: 'Kerala', isServiceable: false },
   ]);
-  const result = await checkDistrictServiceability(10.4, 76.4, model);
+  const result = await checkDistrictServiceability(10.4, 76.4, model, radiusModel());
   assert.equal(result.serviceable, false);
   assert.deepEqual(result.districts, ['Ernakulam', 'Thrissur']);
 });
@@ -51,7 +57,7 @@ test('a shared/overlapping boundary is allowed only when every matching district
 test('invalid coordinates and missing boundary data fail as verification errors', async () => {
   assert.throws(() => validateCoordinates(91, 76), error => error.statusCode === 400);
   const { model } = districtModel([], 0);
-  await assert.rejects(checkDistrictServiceability(10, 76, model), error => error.statusCode === 503);
+  await assert.rejects(checkDistrictServiceability(10, 76, model, radiusModel()), error => error.statusCode === 503);
 });
 
 test('admin status changes persist status and the acting administrator', async () => {
@@ -65,7 +71,26 @@ test('admin status changes persist status and the acting administrator', async (
 
 test('pickup creation rejects a location in a disabled district', async () => {
   const { model } = districtModel([{ districtName: 'Kollam', stateName: 'Kerala', isServiceable: false }]);
-  await assert.rejects(assertPickupDistrictServiceable(76.6, 8.9, model), error => error.statusCode === 403 && error.message.includes('Kollam'));
+  await assert.rejects(assertPickupDistrictServiceable(76.6, 8.9, model, radiusModel()), error => error.statusCode === 403 && error.message.includes('Kollam'));
+});
+
+test('an active radius grants service within its center even in a disabled district', async () => {
+  const { model } = districtModel([{ districtName: 'Kollam', stateName: 'Kerala', isServiceable: false }]);
+  const result = await checkDistrictServiceability(8.9, 76.6, model, radiusModel([
+    { name: 'Kollam Depot', center: { type: 'Point', coordinates: [76.6, 8.9] }, radiusMeters: 1500 },
+  ]));
+  assert.equal(result.supported, true);
+  assert.equal(result.serviceable, true);
+  assert.equal(result.serviceArea, 'Kollam Depot');
+});
+
+test('a location beyond an active radius remains unsupported outside enabled districts', async () => {
+  const { model } = districtModel([], 14);
+  const result = await checkDistrictServiceability(8.902, 76.6, model, radiusModel([
+    { name: 'Kollam Depot', center: { type: 'Point', coordinates: [76.6, 8.9] }, radiusMeters: 100 },
+  ]));
+  assert.equal(result.supported, false);
+  assert.equal(result.serviceable, false);
 });
 
 test('the checked-in boundary source contains all 14 valid WGS 84 Kerala district geometries', async () => {
