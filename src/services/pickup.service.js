@@ -6,6 +6,7 @@ import { ACTIVE_PICKUP_STATUSES, ACTIVE_PICKUP_MESSAGE } from '../constants/pick
 import WastePrice from "../models/wastePrice.model.js";
 import ApiError from "../utils/apiError.js";
 import { notifyPickupEvent } from "./notification.service.js";
+import { assertPickupDistrictServiceable } from './serviceArea.service.js';
 
 const GST_RATE = 18;
 const calculateCharge = (weight, ratePerKg) => {
@@ -125,6 +126,9 @@ export const createPickup = async (data) => {
     try {
         const active = await Pickup.exists({ customerId: data.customerId, status: { $in: ACTIVE_PICKUP_STATUSES } });
         if (active) throw new ApiError(409, ACTIVE_PICKUP_MESSAGE);
+        const coordinates = data.pickupLocation?.coordinates;
+        if (!Array.isArray(coordinates) || coordinates.length !== 2) throw new ApiError(400, 'A valid pickup location is required.');
+        await assertPickupDistrictServiceable(coordinates[0], coordinates[1]);
         let pickup;
         try {
             pickup = await Pickup.create({ ...data, customerRequest: true, status: 'scheduled', recurringContractId: null, completionLockId: null });

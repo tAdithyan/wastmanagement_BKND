@@ -16,7 +16,8 @@ function setup(initial = [], concurrent = false) {
     },
   };
   class ApiError extends Error { constructor(status,message){super(message);this.status=status;} }
-  const create = new Function('Pickup','ApiError','ACTIVE_PICKUP_STATUSES','ACTIVE_PICKUP_MESSAGE','notifyPickupEvent', body + '; return createPickup;')(Pickup,ApiError,ACTIVE_PICKUP_STATUSES,ACTIVE_PICKUP_MESSAGE,async()=>{});
+  const runCreate = new Function('Pickup','ApiError','ACTIVE_PICKUP_STATUSES','ACTIVE_PICKUP_MESSAGE','notifyPickupEvent','assertPickupDistrictServiceable', body + '; return createPickup;')(Pickup,ApiError,ACTIVE_PICKUP_STATUSES,ACTIVE_PICKUP_MESSAGE,async()=>{},async()=>{});
+  const create = data => runCreate({ pickupLocation: { coordinates: [76.2, 10.5] }, ...data });
   return {create,rows};
 }
 test('every active status, including legacy requests, prevents a second request', async () => {

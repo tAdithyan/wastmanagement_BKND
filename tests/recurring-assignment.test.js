@@ -11,10 +11,10 @@ test('recurring generation assigns the selected agent, leaves optional selection
     pickupLocation: { type: 'Point', coordinates: [76, 10] }, wasteType: 'Plastic', ratePerKg: 5,
     name: 'Test', save: async () => {},
   }));
-  const generate = new Function('Pickup', 'RecurringPickup', source + ';return generateRecurringPickups;')({
+  const generate = new Function('Pickup', 'RecurringPickup', 'assertPickupDistrictServiceable', source + ';return generateRecurringPickups;')({
     exists: async query => rows.some(row => row.recurringGenerationKey === query.$or[0].recurringGenerationKey),
     create: async row => { rows.push(row); },
-  }, { find: async () => contracts });
+  }, { find: async () => contracts }, async () => {});
   const today = new Date(2026, 8, 20, 12);
   assert.equal(await generate(today), 3);
   assert.deepEqual(rows.map(({ operatorId, status }) => [operatorId, status]), [['agent1', 'assigned'], [null, 'scheduled'], [null, 'scheduled']]);
