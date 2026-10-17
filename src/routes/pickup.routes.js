@@ -213,6 +213,7 @@ router.get(
  *             - completed
  *             - cancelled
  *             - failed
+ *             - expired
  *     responses:
  *       200:
  *         description: Pickups fetched successfully

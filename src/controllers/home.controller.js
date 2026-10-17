@@ -17,11 +17,11 @@ export const getCustomerHomepageData = async (req, res, next) => {
             );
         }
 
-        // Get pickups except cancelled and failed
+        // Expired pickups remain in customer history but are not active totals.
         const pickups = await Pickup.find({
             customerId,
             status: {
-                $nin: ["cancelled", "failed"]
+                $nin: ["cancelled", "failed", "expired"]
             }
         });
 

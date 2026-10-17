@@ -28,8 +28,8 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 // Body parsers
-app.use(express.json({ limit: "16kb" }));
-app.use(express.urlencoded({ extended: true, limit: "16kb" }));
+app.use(express.json({ limit: "64kb" }));
+app.use(express.urlencoded({ extended: true, limit: "64kb" }));
 
 // Prevent browsers from showing a stale Swagger specification after routes change.
 app.use(["/api-docs", "/api-docs.json"], (req, res, next) => {
