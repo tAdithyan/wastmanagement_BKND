@@ -92,6 +92,7 @@ const pickupSchema = new mongoose.Schema(
                 "completed",
                 "cancelled",
                 "failed",
+                "expired",
             ],
 
             default: "scheduled",

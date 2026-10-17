@@ -81,7 +81,7 @@ const router = Router();
  *                             example: 250
  *                           status:
  *                             type: string
- *                             enum: [scheduled, assigned, in_progress, completed, cancelled, failed]
+ *                             enum: [scheduled, assigned, in_progress, completed, cancelled, failed, expired]
  *                           createdAt:
  *                             type: string
  *                             format: date-time
