@@ -68,7 +68,10 @@ const generateRecurringPickupsOnce = async (now) => {
 
 let generationRun = null;
 export const generateRecurringPickups = (now = new Date()) => {
-  if (generationRun) return generationRun;
+  // A contract may be saved while the scheduled pass is already querying
+  // contracts. Wait for that pass, then run again so the newly saved contract
+  // is included instead of inheriting a stale result.
+  if (generationRun) return generationRun.then(() => generateRecurringPickups(now));
   generationRun = generateRecurringPickupsOnce(now).finally(() => { generationRun = null; });
   return generationRun;
 };
